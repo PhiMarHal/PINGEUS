@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Terrain-First Generation</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #2c3e50;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        canvas {
+            border: 2px solid #34495e;
+            background-color: #87CEEB;
+            margin: 10px;
+        }
+
+        .controls {
+            margin: 15px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #2980b9;
+        }
+
+        .info {
+            max-width: 600px;
+            text-align: center;
+            margin-bottom: 20px;
+            background-color: #34495e;
+            padding: 15px;
+            border-radius: 10px;
+        }
+
+        .legend {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            margin: 10px;
+            flex-wrap: wrap;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .color-box {
+            width: 20px;
+            height: 20px;
+            border: 1px solid #333;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="info">
+        <h1>Terrain-First Generation</h1>
+        <p>Draw lines by dragging. When lines intersect, they explode! Explosion size is purely proportional to total
+            line length (no minimum or maximum).</p>
+    </div>
+
+    <div class="legend">
+        <div class="legend-item">
+            <div class="color-box" style="background-color: #8B4513;"></div>
+            <span>Solid Terrain</span>
+        </div>
+        <div class="legend-item">
+            <div class="color-box" style="background-color: #32CD32;"></div>
+            <span>Entrance</span>
+        </div>
+        <div class="legend-item">
+            <div class="color-box" style="background-color: #FF4444;"></div>
+            <span>Exit</span>
+        </div>
+    </div>
+
+    <canvas id="terrainCanvas" width="800" height="1200"></canvas>
+
+    <div class="controls">
+        <button onclick="generateTerrain()">Generate New Terrain</button>
+        <button onclick="changeDensity(-3)">Less Dense</button>
+        <button onclick="changeDensity(3)">More Dense</button>
+        <button onclick="changeTerrainRatio(-0.1)">Less Terrain</button>
+        <button onclick="changeTerrainRatio(0.1)">More Terrain</button>
+    </div>
+
+    <div id="info" style="margin-top: 10px; text-align: center;">
+        <p>Points: <span id="pointCount">18</span> | Terrain Ratio: <span id="terrainRatio">0.4</span></p>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('terrainCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let numPoints = 18;
+        let terrainRatio = 0.4;
+        let points = [];
+        let entrance = null;
+        let exit = null;
+
+        function generatePoints() {
+            points = [];
+            for (let i = 0; i < numPoints; i++) {
+                points.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    isTerrain: Math.random() < terrainRatio
+                });
+            }
+        }
+
+        function distance(x1, y1, x2, y2) {
+            return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+        }
+
+        function generateTerrain() {
+            generatePoints();
+
+            // Clear with sky color
+            ctx.fillStyle = '#87CEEB';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Generate terrain FIRST
+            ctx.fillStyle = '#8B4513';
+            ctx.strokeStyle = '#654321';
+            ctx.lineWidth = 2;
+
+            // Draw terrain blobs
+            for (let i = 0; i < points.length; i++) {
+                if (!points[i].isTerrain) continue;
+
+                const centerX = points[i].x;
+                const centerY = points[i].y;
+
+                // Randomly choose between compact blob or elongated platform
+                const platformType = Math.random();
+                let blobPoints = [];
+
+                if (platformType < 0.4) {
+                    // Create elongated platform (40% chance)
+                    const platformWidth = 80 + Math.random() * 120;
+                    const platformHeight = 25 + Math.random() * 35;
+                    const angle = (Math.random() - 0.5) * 0.5;
+
+                    const numPointsInBlob = 10 + Math.floor(Math.random() * 6);
+                    for (let j = 0; j < numPointsInBlob; j++) {
+                        const t = j / numPointsInBlob;
+                        const localAngle = t * Math.PI * 2;
+                        const localRadius = (Math.abs(Math.cos(localAngle)) * platformWidth / 2 +
+                            Math.abs(Math.sin(localAngle)) * platformHeight / 2) *
+                            (0.8 + Math.random() * 0.4);
+
+                        const x = centerX + Math.cos(localAngle + angle) * localRadius;
+                        const y = centerY + Math.sin(localAngle + angle) * localRadius;
+
+                        blobPoints.push({ x, y });
+                    }
+                } else {
+                    // Create compact blob (60% chance)
+                    const radius = 35 + Math.random() * 25;
+                    const numPointsInBlob = 8 + Math.floor(Math.random() * 6);
+
+                    for (let j = 0; j < numPointsInBlob; j++) {
+                        const angle = (j / numPointsInBlob) * Math.PI * 2;
+                        const r = radius * (0.7 + Math.random() * 0.6);
+                        const x = centerX + Math.cos(angle) * r;
+                        const y = centerY + Math.sin(angle) * r;
+
+                        blobPoints.push({ x, y });
+                    }
+                }
+
+                // Draw the terrain blob
+                if (blobPoints.length >= 3) {
+                    ctx.beginPath();
+                    ctx.moveTo(blobPoints[0].x, blobPoints[0].y);
+
+                    for (let j = 1; j < blobPoints.length; j++) {
+                        const current = blobPoints[j];
+                        const next = blobPoints[(j + 1) % blobPoints.length];
+
+                        const cpX = current.x + (next.x - current.x) * 0.5;
+                        const cpY = current.y + (next.y - current.y) * 0.5;
+
+                        ctx.quadraticCurveTo(current.x, current.y, cpX, cpY);
+                    }
+
+                    ctx.quadraticCurveTo(
+                        blobPoints[blobPoints.length - 1].x,
+                        blobPoints[blobPoints.length - 1].y,
+                        blobPoints[0].x,
+                        blobPoints[0].y
+                    );
+
+                    ctx.fill();
+                    ctx.stroke();
+                }
+            }
+
+            // THEN find surfaces for spawn points
+            findSpawnPoints();
+            drawSpawnPoints();
+            updateInfo();
+        }
+
+        function isTerrainAt(x, y) {
+            if (x < 0 || x >= canvas.width || y < 0 || y >= canvas.height) return false;
+
+            const imageData = ctx.getImageData(x, y, 1, 1);
+            const pixel = imageData.data;
+            // Check for brown terrain color
+            return (pixel[0] > 100 && pixel[0] < 150 && pixel[1] < 80 && pixel[2] < 50);
+        }
+
+        function findSpawnPoints() {
+            const surfacePoints = [];
+            const scanStep = 12;
+
+            // Scan for terrain surfaces
+            for (let x = 30; x < canvas.width - 30; x += scanStep) {
+                for (let y = 50; y < canvas.height - 50; y += scanStep) {
+                    // Check if this point is on terrain
+                    if (isTerrainAt(x, y)) {
+                        // Check if there's space above for spawning
+                        const hasSpaceAbove = !isTerrainAt(x, y - 20) && !isTerrainAt(x, y - 15);
+
+                        if (hasSpaceAbove) {
+                            // Check if surface is reasonably flat
+                            const leftOk = isTerrainAt(x - scanStep, y) || isTerrainAt(x - scanStep, y + 5);
+                            const rightOk = isTerrainAt(x + scanStep, y) || isTerrainAt(x + scanStep, y + 5);
+
+                            if (leftOk && rightOk) {
+                                surfacePoints.push({ x, y });
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (surfacePoints.length >= 2) {
+                // Sort by elevation (higher surfaces first)
+                surfacePoints.sort((a, b) => a.y - b.y);
+
+                // Choose entrance from upper surfaces
+                const upperSurfaces = surfacePoints.filter(p => p.y < canvas.height * 0.6);
+                const entranceSurface = upperSurfaces.length > 0 ?
+                    upperSurfaces[Math.floor(Math.random() * Math.min(3, upperSurfaces.length))] :
+                    surfacePoints[0];
+
+                entrance = { x: entranceSurface.x, y: entranceSurface.y - 24 }; // Circle radius (12) + clearance (12)
+
+                // Choose exit from surfaces far from entrance
+                let validExits = surfacePoints.filter(p =>
+                    distance(p.x, p.y, entrance.x, entrance.y) > 120
+                );
+
+                if (validExits.length === 0) {
+                    validExits = surfacePoints.filter(p =>
+                        distance(p.x, p.y, entrance.x, entrance.y) > 80
+                    );
+                }
+
+                if (validExits.length > 0) {
+                    const exitSurface = validExits[Math.floor(Math.random() * validExits.length)];
+                    exit = { x: exitSurface.x, y: exitSurface.y - 24 }; // Circle radius + clearance
+                } else {
+                    exit = { x: surfacePoints[surfacePoints.length - 1].x, y: surfacePoints[surfacePoints.length - 1].y - 24 };
+                }
+            } else {
+                // Fallback: create platforms for spawn points
+                ctx.fillStyle = '#8B4513';
+
+                const entranceY = 80 + Math.random() * 80;
+                const exitY = canvas.height - 120 + Math.random() * 60;
+
+                ctx.fillRect(40, entranceY, 50, 12);
+                ctx.fillRect(canvas.width - 90, exitY, 50, 12);
+
+                entrance = { x: 65, y: entranceY - 20 }; // Fixed positioning
+                exit = { x: canvas.width - 65, y: exitY - 20 };
+            }
+        }
+
+        function drawSpawnPoints() {
+            // Draw entrance
+            if (entrance) {
+                ctx.fillStyle = '#32CD32';
+                ctx.beginPath();
+                ctx.arc(entrance.x, entrance.y, 12, 0, 2 * Math.PI);
+                ctx.fill();
+
+                ctx.strokeStyle = '#000';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+
+            // Draw exit
+            if (exit) {
+                ctx.fillStyle = '#FF4444';
+                ctx.beginPath();
+                ctx.arc(exit.x, exit.y, 12, 0, 2 * Math.PI);
+                ctx.fill();
+
+                ctx.strokeStyle = '#000';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+        }
+
+        function updateInfo() {
+            document.getElementById('pointCount').textContent = numPoints;
+            document.getElementById('terrainRatio').textContent = terrainRatio.toFixed(1);
+        }
+
+        function changeDensity(delta) {
+            numPoints = Math.max(8, Math.min(30, numPoints + delta));
+            generateTerrain();
+        }
+
+        function changeTerrainRatio(delta) {
+            terrainRatio = Math.max(0.2, Math.min(0.7, terrainRatio + delta));
+            generateTerrain();
+        }
+
+        // Line drawing and intersection system
+        let isDrawing = false;
+        let currentLine = [];
+        let drawnLines = [];
+
+        canvas.addEventListener('mousedown', function (event) {
+            const rect = canvas.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+
+            isDrawing = true;
+            currentLine = [{ x, y }];
+        });
+
+        canvas.addEventListener('mousemove', function (event) {
+            if (!isDrawing) return;
+
+            const rect = canvas.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+
+            currentLine.push({ x, y });
+
+            // Draw current line preview
+            redrawCanvas();
+            drawLinePreview();
+        });
+
+        canvas.addEventListener('mouseup', function (event) {
+            if (!isDrawing) return;
+
+            isDrawing = false;
+
+            if (currentLine.length > 1) {
+                // Check for intersections with existing lines
+                const intersections = findIntersections(currentLine, drawnLines);
+
+                // Add current line to drawn lines
+                drawnLines.push([...currentLine]);
+
+                // Create explosions at intersection points
+                intersections.forEach(point => {
+                    const totalLength = getLineLength(currentLine) + getLineLength(point.intersectingLine);
+                    createShapeExplosion(point.x, point.y, currentLine, point.intersectingLine, totalLength);
+
+                    // Destroy lines in area proportional to total line length
+                    const destructionRadius = totalLength * 0.08; // Same scale as explosion
+                    destroyLinesInArea(point.x, point.y, Math.max(1, destructionRadius));
+                });
+            }
+
+            currentLine = [];
+            redrawCanvas();
+            drawAllLines();
+        });
+
+        function redrawCanvas() {
+            // Redraw everything except terrain (which stays as-is)
+            // Only clear the line overlay area
+        }
+
+        function drawLinePreview() {
+            if (currentLine.length < 2) return;
+
+            ctx.save();
+            ctx.strokeStyle = '#00FF00';
+            ctx.lineWidth = 3;
+            ctx.lineCap = 'round';
+            ctx.globalAlpha = 0.7;
+
+            ctx.beginPath();
+            ctx.moveTo(currentLine[0].x, currentLine[0].y);
+            for (let i = 1; i < currentLine.length; i++) {
+                ctx.lineTo(currentLine[i].x, currentLine[i].y);
+            }
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        function destroyLinesInArea(explosionX, explosionY, radius) {
+            // Actually modify the drawnLines array to remove segments in explosion area
+            for (let i = drawnLines.length - 1; i >= 0; i--) {
+                const line = drawnLines[i];
+                const survivingSegments = [];
+
+                let currentSegment = [];
+
+                for (let j = 0; j < line.length; j++) {
+                    const point = line[j];
+                    const distToExplosion = Math.sqrt(
+                        (point.x - explosionX) ** 2 + (point.y - explosionY) ** 2
+                    );
+
+                    if (distToExplosion > radius) {
+                        // Point survives - add to current segment
+                        currentSegment.push(point);
+                    } else {
+                        // Point destroyed - save current segment if it exists
+                        if (currentSegment.length > 1) {
+                            survivingSegments.push([...currentSegment]);
+                        }
+                        currentSegment = []; // Start new segment
+                    }
+                }
+
+                // Don't forget the last segment
+                if (currentSegment.length > 1) {
+                    survivingSegments.push(currentSegment);
+                }
+
+                // Replace the original line with surviving segments
+                if (survivingSegments.length === 0) {
+                    // Entire line destroyed
+                    drawnLines.splice(i, 1);
+                } else if (survivingSegments.length === 1) {
+                    // Line partially destroyed, one piece remains
+                    drawnLines[i] = survivingSegments[0];
+                } else {
+                    // Line split into multiple pieces
+                    drawnLines.splice(i, 1); // Remove original
+                    // Add all surviving segments
+                    drawnLines.push(...survivingSegments);
+                }
+            }
+        }
+
+        function drawAllLines() {
+            drawnLines.forEach((line, index) => {
+                if (line.length < 2) return;
+
+                ctx.save();
+                ctx.strokeStyle = '#0066FF';
+                ctx.lineWidth = 3;
+                ctx.lineCap = 'round';
+                ctx.globalAlpha = 0.8;
+
+                ctx.beginPath();
+                ctx.moveTo(line[0].x, line[0].y);
+                for (let i = 1; i < line.length; i++) {
+                    ctx.lineTo(line[i].x, line[i].y);
+                }
+                ctx.stroke();
+                ctx.restore();
+            });
+        }
+
+        function findIntersections(newLine, existingLines) {
+            const intersections = [];
+
+            // Simple intersection detection between line segments
+            for (let existingLine of existingLines) {
+                for (let i = 0; i < newLine.length - 1; i++) {
+                    const newSegment = {
+                        start: newLine[i],
+                        end: newLine[i + 1]
+                    };
+
+                    for (let j = 0; j < existingLine.length - 1; j++) {
+                        const existingSegment = {
+                            start: existingLine[j],
+                            end: existingLine[j + 1]
+                        };
+
+                        const intersection = getLineIntersection(newSegment, existingSegment);
+                        if (intersection) {
+                            intersections.push({
+                                x: intersection.x,
+                                y: intersection.y,
+                                intersectingLine: existingLine
+                            });
+                        }
+                    }
+                }
+            }
+
+            return intersections;
+        }
+
+        function getLineIntersection(line1, line2) {
+            const x1 = line1.start.x, y1 = line1.start.y;
+            const x2 = line1.end.x, y2 = line1.end.y;
+            const x3 = line2.start.x, y3 = line2.start.y;
+            const x4 = line2.end.x, y4 = line2.end.y;
+
+            const denominator = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+            if (Math.abs(denominator) < 0.0001) return null; // Lines are parallel
+
+            const t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denominator;
+            const u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / denominator;
+
+            if (t >= 0 && t <= 1 && u >= 0 && u <= 1) {
+                return {
+                    x: x1 + t * (x2 - x1),
+                    y: y1 + t * (y2 - y1)
+                };
+            }
+
+            return null;
+        }
+
+        function getLineLength(line) {
+            if (line.length < 2) return 0;
+
+            let totalLength = 0;
+            for (let i = 1; i < line.length; i++) {
+                const dx = line[i].x - line[i - 1].x;
+                const dy = line[i].y - line[i - 1].y;
+                totalLength += Math.sqrt(dx * dx + dy * dy);
+            }
+            return totalLength;
+        }
+
+        function createShapeExplosion(x, y, line1, line2, totalLineLength) {
+            // Create organic explosion shape instead of perfect circles
+            ctx.save();
+            ctx.globalCompositeOperation = 'destination-out';
+            ctx.fillStyle = 'rgba(0, 0, 0, 1)';
+
+            // Pure linear scaling - no minimum or maximum
+            // Explosion radius directly proportional to total line length
+            const lengthFactor = 0.08; // Adjust this to tune explosion scaling
+            const baseRadius = totalLineLength * lengthFactor;
+
+            // Don't allow completely zero explosions, but keep it minimal
+            const finalRadius = Math.max(1, baseRadius);
+
+            console.log(`Lines: ${Math.round(totalLineLength)}px = ${Math.round(finalRadius)}px explosion`);
+
+            const numPoints = 12 + Math.floor(Math.random() * 8);
+            const explosionPoints = [];
+
+            for (let i = 0; i < numPoints; i++) {
+                const angle = (i / numPoints) * Math.PI * 2;
+                // Vary radius significantly for organic look
+                const radiusVariation = 0.6 + Math.random() * 0.8; // 60% to 140% of base
+                const radius = finalRadius * radiusVariation;
+
+                // Add some angular noise for more organic shape
+                const angleNoise = (Math.random() - 0.5) * 0.3;
+                const finalAngle = angle + angleNoise;
+
+                explosionPoints.push({
+                    x: x + Math.cos(finalAngle) * radius,
+                    y: y + Math.sin(finalAngle) * radius
+                });
+            }
+
+            // Draw the organic explosion shape
+            if (explosionPoints.length >= 3) {
+                ctx.beginPath();
+                ctx.moveTo(explosionPoints[0].x, explosionPoints[0].y);
+
+                // Use smooth curves to connect the points
+                for (let i = 1; i < explosionPoints.length; i++) {
+                    const current = explosionPoints[i];
+                    const next = explosionPoints[(i + 1) % explosionPoints.length];
+
+                    const cpX = current.x + (next.x - current.x) * 0.5;
+                    const cpY = current.y + (next.y - current.y) * 0.5;
+
+                    ctx.quadraticCurveTo(current.x, current.y, cpX, cpY);
+                }
+
+                // Close the shape smoothly
+                ctx.quadraticCurveTo(
+                    explosionPoints[explosionPoints.length - 1].x,
+                    explosionPoints[explosionPoints.length - 1].y,
+                    explosionPoints[0].x,
+                    explosionPoints[0].y
+                );
+
+                ctx.fill();
+
+                // ENSURE COMPLETE DESTRUCTION - fill again with slightly larger shape
+                ctx.beginPath();
+                ctx.moveTo(explosionPoints[0].x, explosionPoints[0].y);
+
+                for (let i = 1; i < explosionPoints.length; i++) {
+                    const current = explosionPoints[i];
+                    const next = explosionPoints[(i + 1) % explosionPoints.length];
+
+                    // Scale up slightly to ensure complete removal
+                    const scaledCurrentX = x + (current.x - x) * 1.1;
+                    const scaledCurrentY = y + (current.y - y) * 1.1;
+                    const scaledNextX = x + (next.x - x) * 1.1;
+                    const scaledNextY = y + (next.y - y) * 1.1;
+
+                    const cpX = scaledCurrentX + (scaledNextX - scaledCurrentX) * 0.5;
+                    const cpY = scaledCurrentY + (scaledNextY - scaledCurrentY) * 0.5;
+
+                    ctx.quadraticCurveTo(scaledCurrentX, scaledCurrentY, cpX, cpY);
+                }
+
+                ctx.quadraticCurveTo(
+                    x + (explosionPoints[explosionPoints.length - 1].x - x) * 1.1,
+                    y + (explosionPoints[explosionPoints.length - 1].y - y) * 1.1,
+                    x + (explosionPoints[0].x - x) * 1.1,
+                    y + (explosionPoints[0].y - y) * 1.1
+                );
+
+                ctx.fill();
+            }
+
+            // Add some scattered smaller destruction spots around main explosion
+            for (let i = 0; i < 3; i++) {
+                const scatterX = x + (Math.random() - 0.5) * finalRadius * 1.5;
+                const scatterY = y + (Math.random() - 0.5) * finalRadius * 1.5;
+                const scatterRadius = finalRadius * (0.2 + Math.random() * 0.3);
+
+                ctx.beginPath();
+                ctx.arc(scatterX, scatterY, scatterRadius, 0, 2 * Math.PI);
+                ctx.fill();
+            }
+
+            ctx.restore();
+
+            // Visual explosion effect with organic shape
+            ctx.save();
+            ctx.strokeStyle = '#FF4500';
+            ctx.lineWidth = 2;
+            ctx.globalAlpha = 0.8;
+
+            // Draw organic explosion outline
+            ctx.beginPath();
+            ctx.moveTo(explosionPoints[0].x, explosionPoints[0].y);
+
+            for (let i = 1; i < explosionPoints.length; i++) {
+                const current = explosionPoints[i];
+                const next = explosionPoints[(i + 1) % explosionPoints.length];
+
+                const cpX = current.x + (next.x - current.x) * 0.5;
+                const cpY = current.y + (next.y - current.y) * 0.5;
+
+                ctx.quadraticCurveTo(current.x, current.y, cpX, cpY);
+            }
+
+            ctx.quadraticCurveTo(
+                explosionPoints[explosionPoints.length - 1].x,
+                explosionPoints[explosionPoints.length - 1].y,
+                explosionPoints[0].x,
+                explosionPoints[0].y
+            );
+
+            ctx.stroke();
+
+            // Remove explosion outline after a moment
+            setTimeout(() => {
+                ctx.save();
+                ctx.globalCompositeOperation = 'destination-out';
+                ctx.strokeStyle = 'rgba(0, 0, 0, 1)';
+                ctx.lineWidth = 6;
+
+                ctx.beginPath();
+                ctx.moveTo(explosionPoints[0].x, explosionPoints[0].y);
+
+                for (let i = 1; i < explosionPoints.length; i++) {
+                    const current = explosionPoints[i];
+                    const next = explosionPoints[(i + 1) % explosionPoints.length];
+
+                    const cpX = current.x + (next.x - current.x) * 0.5;
+                    const cpY = current.y + (next.y - current.y) * 0.5;
+
+                    ctx.quadraticCurveTo(current.x, current.y, cpX, cpY);
+                }
+
+                ctx.quadraticCurveTo(
+                    explosionPoints[explosionPoints.length - 1].x,
+                    explosionPoints[explosionPoints.length - 1].y,
+                    explosionPoints[0].x,
+                    explosionPoints[0].y
+                );
+
+                ctx.stroke();
+                ctx.restore();
+            }, 300);
+
+            ctx.restore();
+        }
+
+        function findNearestLinePoint(x, y, line) {
+            let nearest = null;
+            let minDist = Infinity;
+            let nearestIndex = -1;
+
+            for (let i = 0; i < line.length; i++) {
+                const dist = Math.sqrt((line[i].x - x) ** 2 + (line[i].y - y) ** 2);
+                if (dist < minDist) {
+                    minDist = dist;
+                    nearest = line[i];
+                    nearestIndex = i;
+                }
+            }
+
+            return {
+                point: nearest,
+                next: nearestIndex < line.length - 1 ? line[nearestIndex + 1] : null,
+                index: nearestIndex
+            };
+        }
+
+        // Generate initial terrain
+        generateTerrain();
+    </script>
+</body>
+
+</html>
