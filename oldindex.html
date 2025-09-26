@@ -27,24 +27,11 @@
             height: auto;
             display: block;
         }
-
-        .info-panel {
-            background: rgba(0, 0, 0, 0.8);
-            padding: 10px;
-            margin: 10px;
-            border-radius: 5px;
-            font-size: 14px;
-            text-align: center;
-        }
     </style>
 </head>
 
 <body>
     <canvas id="terrainCanvas" width="800" height="1200"></canvas>
-    <div class="info-panel">
-        Draw lines to guide penguins! Lines explode when they intersect.
-        <br>Green = Entrance, Red = Exit | Save penguins to advance levels!
-    </div>
 
     <script>
         const canvas = document.getElementById('terrainCanvas');
@@ -63,13 +50,13 @@
         let exit = null;
         let lemmings = [];
         let lastSpawnTime = 0;
-        const SPAWN_INTERVAL = 2000;
+        const SPAWN_INTERVAL = 2000; // Spawn every 2 seconds
         let maxLemmings = 40;
         let lemmingsSpawned = 0;
         let lemmingsSaved = 0;
 
-        // Game state - added level progression
-        let levelTime = 120000;
+        // Game state
+        let levelTime = 120000; // 2 minutes in milliseconds
         let gameStartTime = 0;
         let currentLevel = 1;
         let gameActive = true;
@@ -79,15 +66,15 @@
         let currentLine = [];
         let drawnLines = [];
 
-        // Lemming class - EXACT copy from working index.html
+        // Lemming class
         class Lemming {
             constructor(x, y) {
                 this.x = x;
                 this.y = y;
-                this.vx = 0.25;
+                this.vx = 0.25; // Slow movement
                 this.vy = 0;
-                this.width = 30;
-                this.height = 40;
+                this.width = 30; // Doubled from 15
+                this.height = 40; // Doubled from 20
                 this.alive = true;
             }
 
@@ -142,7 +129,7 @@
                 }
 
                 // Check if reached exit
-                if (exit && this.distance(this.x + this.width / 2, this.y + this.height / 2, exit.x, exit.y) < 60) {
+                if (exit && this.distance(this.x + this.width / 2, this.y + this.height / 2, exit.x, exit.y) < 60) { // Increased from 40 to 60
                     this.alive = false;
                     lemmingsSaved++;
                     console.log(`Penguin saved! Total: ${lemmingsSaved}/${lemmingsSpawned}`);
@@ -157,7 +144,7 @@
             }
 
             getPixelColor(x, y) {
-                // Get pixel color - check BOTH canvases and prioritize lines over terrain
+                // Get pixel color from both terrain canvas and main canvas
                 x = Math.floor(x);
                 y = Math.floor(y);
 
@@ -165,48 +152,25 @@
                     return [139, 69, 19, 255]; // Return terrain color for boundaries
                 }
 
-                // Check main canvas FIRST for lines (green and blue)
-                const mainData = ctx.getImageData(x, y, 1, 1);
-                const mainPixel = [mainData.data[0], mainData.data[1], mainData.data[2], mainData.data[3]];
+                // Check terrain canvas first
+                const terrainData = terrainCtx.getImageData(x, y, 1, 1);
+                const terrainPixel = terrainData.data;
 
-                // If main canvas has a line (green or blue), prioritize that
-                if (this.isLinePixel(mainPixel)) {
-                    return mainPixel;
+                // If it's terrain on terrain canvas, return that
+                if (this.isSolid([terrainPixel[0], terrainPixel[1], terrainPixel[2], terrainPixel[3]])) {
+                    return [terrainPixel[0], terrainPixel[1], terrainPixel[2], terrainPixel[3]];
                 }
 
-                // Otherwise check terrain canvas
-                const terrainData = terrainCtx.getImageData(x, y, 1, 1);
-                const terrainPixel = [terrainData.data[0], terrainData.data[1], terrainData.data[2], terrainData.data[3]];
-                return terrainPixel;
-            }
-
-            isLinePixel(pixel) {
-                const [r, g, b] = pixel;
-
-                // Check if this is a blue line pixel
-                if (Math.abs(r - 0) <= 5 && Math.abs(g - 102) <= 5 && Math.abs(b - 255) <= 5) return true;
-
-                // Check if this is a green line pixel  
-                if (Math.abs(r - 0) <= 5 && Math.abs(g - 255) <= 5 && Math.abs(b - 0) <= 5) return true;
-
-                return false;
+                // Otherwise check main canvas for lines
+                const mainData = ctx.getImageData(x, y, 1, 1);
+                const mainPixel = mainData.data;
+                return [mainPixel[0], mainPixel[1], mainPixel[2], mainPixel[3]];
             }
 
             isBackground(pixel) {
                 // Check if pixel is any shade of blue background
                 const [r, g, b] = pixel;
 
-                // FIRST: Exclude blue lines and green lines - they're NOT background!
-                if (this.isLinePixel(pixel)) {
-                    return false; // Lines are solid, not background
-                }
-
-                // Black pixels (destroyed terrain holes) should be background
-                if (r < 10 && g < 10 && b < 10) {
-                    return true; // Black holes are background - penguins should fall through
-                }
-
-                // THEN: Check for sky blue background
                 // More inclusive blue detection - any bluish color should be background
                 // Sky tends to have blue as the dominant color component
                 return (b > r && b > g) || // Blue is dominant
@@ -219,11 +183,11 @@
                 // Brown terrain
                 if (r > 100 && r < 150 && g < 80 && b < 50) return true;
 
-                // Blue lines - exact matching for #0066FF (0, 102, 255)
-                if (Math.abs(r - 0) <= 5 && Math.abs(g - 102) <= 5 && Math.abs(b - 255) <= 5) return true;
+                // Blue lines
+                if (r < 50 && g > 50 && g < 150 && b > 200) return true;
 
-                // Green lines - exact matching for #00FF00 (0, 255, 0)  
-                if (Math.abs(r - 0) <= 5 && Math.abs(g - 255) <= 5 && Math.abs(b - 0) <= 5) return true;
+                // Green lines (being drawn)
+                if (r < 100 && g > 200 && b < 100 && b < 150) return true;
 
                 // Exclude green entrance circle (let penguins pass through)
                 if (r > 30 && r < 70 && g > 180 && g < 220 && b > 30 && b < 70) return false;
@@ -288,7 +252,7 @@
             return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
         }
 
-        let terrainShapes = [];
+        let terrainShapes = []; // Store terrain shapes
 
         function generateTerrain() {
             generatePoints();
@@ -341,8 +305,13 @@
                 }
             }
 
+            // Draw terrain to canvas first
             drawTerrainOnly();
+
+            // THEN find spawn points by scanning the actual rendered terrain
             findSpawnPoints();
+
+            // Final draw with spawn points
             drawStaticTerrain();
         }
 
@@ -397,6 +366,7 @@
         function isTerrainAt(x, y) {
             if (x < 0 || x >= terrainCanvas.width || y < 0 || y >= terrainCanvas.height) return false;
 
+            // Check terrain canvas instead of main canvas
             const imageData = terrainCtx.getImageData(x, y, 1, 1);
             const pixel = imageData.data;
             return (pixel[0] > 100 && pixel[0] < 150 && pixel[1] < 80 && pixel[2] < 50);
@@ -451,8 +421,12 @@
                 }
             } else {
                 // Fallback
+                ctx.fillStyle = '#8B4513';
                 const entranceY = 200 + Math.random() * 200;
                 const exitY = canvas.height - 300 + Math.random() * 150;
+
+                ctx.fillRect(100, entranceY, 120, 30);
+                ctx.fillRect(canvas.width - 220, exitY, 120, 30);
 
                 entrance = { x: 160, y: entranceY - 50 };
                 exit = { x: canvas.width - 160, y: exitY - 50 };
@@ -463,7 +437,7 @@
             if (entrance) {
                 ctx.fillStyle = '#32CD32';
                 ctx.beginPath();
-                ctx.arc(entrance.x, entrance.y, 45, 0, 2 * Math.PI);
+                ctx.arc(entrance.x, entrance.y, 45, 0, 2 * Math.PI); // Increased from 30 to 45
                 ctx.fill();
 
                 ctx.strokeStyle = '#000';
@@ -474,7 +448,7 @@
             if (exit) {
                 ctx.fillStyle = '#FF4444';
                 ctx.beginPath();
-                ctx.arc(exit.x, exit.y, 45, 0, 2 * Math.PI);
+                ctx.arc(exit.x, exit.y, 45, 0, 2 * Math.PI); // Increased from 30 to 45
                 ctx.fill();
 
                 ctx.strokeStyle = '#000';
@@ -530,6 +504,7 @@
                         }
                     });
 
+                    // Don't add current line either (both lines involved in intersection disappear)
                     console.log('Lines intersected and exploded - both lines destroyed');
                 } else {
                     // No intersections - add line normally
@@ -612,7 +587,7 @@
             terrainCtx.fillStyle = 'rgba(0, 0, 0, 1)';
 
             const lengthFactor = 0.08;
-            const finalRadius = Math.max(30, totalLineLength * lengthFactor);
+            const finalRadius = Math.max(1, totalLineLength * lengthFactor);
 
             const numPoints = 12 + Math.floor(Math.random() * 8);
             const explosionPoints = [];
@@ -653,6 +628,45 @@
                 );
 
                 terrainCtx.fill();
+
+                // Double destruction for complete removal
+                terrainCtx.beginPath();
+                terrainCtx.moveTo(explosionPoints[0].x, explosionPoints[0].y);
+
+                for (let i = 1; i < explosionPoints.length; i++) {
+                    const current = explosionPoints[i];
+                    const next = explosionPoints[(i + 1) % explosionPoints.length];
+
+                    const scaledCurrentX = x + (current.x - x) * 1.1;
+                    const scaledCurrentY = y + (current.y - y) * 1.1;
+                    const scaledNextX = x + (next.x - x) * 1.1;
+                    const scaledNextY = y + (next.y - y) * 1.1;
+
+                    const cpX = scaledCurrentX + (scaledNextX - scaledCurrentX) * 0.5;
+                    const cpY = scaledCurrentY + (scaledNextY - scaledCurrentY) * 0.5;
+
+                    terrainCtx.quadraticCurveTo(scaledCurrentX, scaledCurrentY, cpX, cpY);
+                }
+
+                terrainCtx.quadraticCurveTo(
+                    x + (explosionPoints[explosionPoints.length - 1].x - x) * 1.1,
+                    y + (explosionPoints[explosionPoints.length - 1].y - y) * 1.1,
+                    x + (explosionPoints[0].x - x) * 1.1,
+                    y + (explosionPoints[0].y - y) * 1.1
+                );
+
+                terrainCtx.fill();
+            }
+
+            // Scattered destruction
+            for (let i = 0; i < 3; i++) {
+                const scatterX = x + (Math.random() - 0.5) * finalRadius * 1.5;
+                const scatterY = y + (Math.random() - 0.5) * finalRadius * 1.5;
+                const scatterRadius = finalRadius * (0.2 + Math.random() * 0.3);
+
+                terrainCtx.beginPath();
+                terrainCtx.arc(scatterX, scatterY, scatterRadius, 0, 2 * Math.PI);
+                terrainCtx.fill();
             }
 
             terrainCtx.restore();
@@ -690,12 +704,13 @@
 
         function spawnLemming() {
             if (entrance && lemmingsSpawned < maxLemmings) {
-                // Spawn penguin near the entrance - fixed position
-                const lemming = new Lemming(entrance.x - 15, entrance.y + 10);
+                // Spawn penguin just outside the entrance circle (at bottom edge + small offset)
+                // Circle has 45px radius, spawn just below the circle
+                const lemming = new Lemming(entrance.x - 15, entrance.y + 50);
                 lemmings.push(lemming);
                 lemmingsSpawned++;
 
-                console.log(`Spawned penguin ${lemmingsSpawned}/${maxLemmings} at entrance`);
+                console.log(`Spawned penguin ${lemmingsSpawned}/${maxLemmings} just outside igloo`);
             }
         }
 
@@ -703,11 +718,11 @@
             // Redraw static terrain (this clears canvas and draws terrain + spawn points)
             drawStaticTerrain();
 
-            // Draw current line being drawn - thicker lines
+            // Draw current line being drawn
             if (isDrawing && currentLine.length > 1) {
                 ctx.save();
                 ctx.strokeStyle = '#00FF00';
-                ctx.lineWidth = 12;
+                ctx.lineWidth = 6;
                 ctx.lineCap = 'round';
                 ctx.globalAlpha = 0.7;
 
@@ -720,17 +735,15 @@
                 ctx.restore();
             }
 
-            // Draw completed lines - thicker lines WITHOUT anti-aliasing
+            // Draw completed lines
             drawnLines.forEach(line => {
                 if (line.length < 2) return;
 
                 ctx.save();
                 ctx.strokeStyle = '#0066FF';
-                ctx.lineWidth = 12;
-                ctx.lineCap = 'square';    // Sharp edges instead of round
-                ctx.lineJoin = 'miter';    // Sharp joins
-                ctx.globalAlpha = 1.0;     // Full opacity
-                ctx.imageSmoothingEnabled = false;  // Disable anti-aliasing
+                ctx.lineWidth = 6;
+                ctx.lineCap = 'round';
+                ctx.globalAlpha = 0.8;
 
                 ctx.beginPath();
                 ctx.moveTo(line[0].x, line[0].y);
@@ -800,7 +813,7 @@
             // Reset timer and restart game
             gameStartTime = Date.now();
             gameActive = true;
-            requestAnimationFrame(gameLoop);
+            requestAnimationFrame(gameLoop); // Restart the game loop
         }
 
         function gameLoop(currentTime) {
@@ -809,13 +822,14 @@
             // Check if time is up
             const remainingTime = levelTime - (currentTime - gameStartTime);
             if (remainingTime <= 0) {
+                // Time's up! This is when we check for level progression
                 if (lemmingsSaved > 0) {
                     // At least 1 penguin saved - advance to next level
                     setTimeout(() => nextLevel(), 1000);
                     gameActive = false;
                     return;
                 } else {
-                    // No penguins saved - game over
+                    // No penguins saved when time ran out - GAME OVER
                     setTimeout(() => {
                         ctx.save();
                         ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
