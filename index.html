@@ -89,6 +89,9 @@
                 this.width = 30;
                 this.height = 40;
                 this.alive = true;
+                this.climbingRemaining = 0; // How much more we need to climb
+                this.maxClimbHeight = 64; // Can climb up to 64px total
+                this.climbRate = 2; // Climb 2px per frame (smoother)
             }
 
             update() {
@@ -121,17 +124,61 @@
                         // Hit wall, turn around
                         this.vx = -this.vx;
                     } else {
-                        // Check for step up (small climb)
-                        const pixelAheadFeet = this.getPixelColor(aheadX, feetY);
-                        const pixelAheadHigh = this.getPixelColor(aheadX, feetY - 10);
+                        // On ground - check if we're in the middle of climbing
+                        if (this.climbingRemaining > 0) {
+                            // Continue gradual climbing
+                            const climbThisFrame = Math.min(this.climbRate, this.climbingRemaining);
+                            this.y -= climbThisFrame;
+                            this.climbingRemaining -= climbThisFrame;
+                            this.x += this.vx; // Keep moving forward while climbing
+                        } else {
+                            // Not climbing - check for new obstacles
+                            const aheadX = this.vx > 0 ? this.x + this.width + 1 : this.x - 1;
+                            const pixelAhead = this.getPixelColor(aheadX, bodyY);
+                            const wallAhead = this.isSolid(pixelAhead);
 
-                        if (this.isSolid(pixelAheadFeet) && this.isBackground(pixelAheadHigh)) {
-                            // Small step up - climb a bit
-                            this.y -= 2;
+                            if (wallAhead) {
+                                // Hit wall, turn around
+                                this.vx = -this.vx;
+
+                                // Safety check: make sure we're not inside the wall after turning
+                                const newAheadX = this.vx > 0 ? this.x + this.width + 1 : this.x - 1;
+                                const pixelNewDirection = this.getPixelColor(newAheadX, bodyY);
+                                if (this.isSolid(pixelNewDirection)) {
+                                    // Still blocked in new direction - move away from wall
+                                    this.x += this.vx > 0 ? -2 : 2;
+                                }
+                            } else {
+                                // Check for obstacles at feet level
+                                const pixelAheadFeet = this.getPixelColor(aheadX, feetY);
+
+                                if (this.isSolid(pixelAheadFeet)) {
+                                    // Found obstacle - measure how high we need to climb
+                                    let obstacleHeight = 0;
+
+                                    for (let height = 1; height <= this.maxClimbHeight; height++) {
+                                        const checkY = feetY - height;
+                                        const pixelAtHeight = this.getPixelColor(aheadX, checkY);
+
+                                        if (this.isBackground(pixelAtHeight)) {
+                                            obstacleHeight = height;
+                                            break;
+                                        }
+                                    }
+
+                                    if (obstacleHeight > 0 && obstacleHeight <= this.maxClimbHeight) {
+                                        // Start gradual climbing
+                                        this.climbingRemaining = obstacleHeight;
+                                    } else {
+                                        // Too high - turn around
+                                        this.vx = -this.vx;
+                                    }
+                                } else {
+                                    // Clear path - move forward
+                                    this.x += this.vx;
+                                }
+                            }
                         }
-
-                        // Move horizontally
-                        this.x += this.vx;
                     }
                 }
 
@@ -808,7 +855,14 @@
 
             // Check if time is up
             const remainingTime = levelTime - (currentTime - gameStartTime);
+
+            // DEBUG: Log timer info every few seconds
+            if (Math.floor(currentTime / 1000) % 5 === 0 && Math.random() < 0.1) {
+                console.log(`Time remaining: ${Math.round(remainingTime / 1000)}s, Saved: ${lemmingsSaved}, Spawned: ${lemmingsSpawned}/${maxLemmings}, Active: ${lemmings.filter(l => l.alive).length}`);
+            }
+
             if (remainingTime <= 0) {
+                console.log(`TIMER EXPIRED - Saved: ${lemmingsSaved}`);
                 if (lemmingsSaved > 0) {
                     // At least 1 penguin saved - advance to next level
                     setTimeout(() => nextLevel(), 1000);
@@ -833,6 +887,18 @@
                     gameActive = false;
                     return;
                 }
+            }
+
+            // Check if level completed early (all penguins spawned and none still active)
+            const allPenguinsSpawned = lemmingsSpawned >= maxLemmings;
+            const noPenguinsActive = lemmings.filter(l => l.alive).length === 0;
+
+            if (allPenguinsSpawned && noPenguinsActive && lemmingsSaved > 0) {
+                // All penguins done and some saved - advance to next level
+                console.log(`EARLY COMPLETION - Spawned: ${lemmingsSpawned}, Active: ${lemmings.filter(l => l.alive).length}, Saved: ${lemmingsSaved}`);
+                setTimeout(() => nextLevel(), 1000);
+                gameActive = false;
+                return;
             }
 
             // Spawn penguins periodically
