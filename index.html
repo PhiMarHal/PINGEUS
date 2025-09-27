@@ -44,6 +44,7 @@
     <div class="info-panel">
         Draw lines to guide penguins! Lines explode when they intersect.
         <br>Green = Entrance, Red = Exit | Save penguins to advance levels!
+        <br>Click speed button (bottom right) to toggle 8x speed
     </div>
 
     <script>
@@ -73,6 +74,18 @@
         let gameStartTime = 0;
         let currentLevel = 1;
         let gameActive = true;
+        let accumulatedTime = 0; // Track actual elapsed time with speed
+
+        // Speed control
+        let gameSpeed = 1;
+        let speedButton = {
+            x: canvas.width - 80,
+            y: canvas.height - 60,
+            width: 60,
+            height: 40,
+            pressed: false,
+            animationFrame: 0
+        };
 
         // Line drawing system
         let isDrawing = false;
@@ -530,6 +543,59 @@
             }
         }
 
+        function drawSpeedButton() {
+            const button = speedButton;
+
+            // Button background
+            ctx.save();
+            ctx.fillStyle = button.pressed ? '#4CAF50' : '#333';
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.fillRect(button.x, button.y, button.width, button.height);
+            ctx.strokeRect(button.x, button.y, button.width, button.height);
+
+            // Arrow symbols with animation
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 12px Arial';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+
+            if (button.pressed) {
+                // Animate through >, >>, >>> in succession
+                const animSpeed = 20; // frames per arrow
+                const cycle = Math.floor(button.animationFrame / animSpeed) % 3;
+
+                // Draw arrows with lighting up effect
+                const arrowY = button.y + button.height / 2;
+                const startX = button.x + 8;
+                const spacing = 12;
+
+                for (let i = 0; i < 3; i++) {
+                    if (i <= cycle) {
+                        ctx.fillStyle = '#FFD700'; // Gold for lit arrows
+                    } else {
+                        ctx.fillStyle = '#666'; // Dark for unlit arrows
+                    }
+                    ctx.fillText('>', startX + i * spacing, arrowY);
+                }
+
+                button.animationFrame++;
+            } else {
+                // Draw single > when not pressed
+                ctx.fillStyle = '#fff';
+                ctx.textAlign = 'center';
+                ctx.fillText('>', button.x + button.width / 2, button.y + button.height / 2);
+                button.animationFrame = 0;
+            }
+
+            ctx.restore();
+        }
+
+        function isPointInButton(x, y, button) {
+            return x >= button.x && x <= button.x + button.width &&
+                y >= button.y && y <= button.y + button.height;
+        }
+
         // Helper function for mouse coordinates
         function getMousePos(event) {
             const rect = canvas.getBoundingClientRect();
@@ -545,6 +611,15 @@
         // Line drawing events
         canvas.addEventListener('mousedown', function (event) {
             const pos = getMousePos(event);
+
+            // Check if clicked on speed button
+            if (isPointInButton(pos.x, pos.y, speedButton)) {
+                speedButton.pressed = !speedButton.pressed;
+                gameSpeed = speedButton.pressed ? 8 : 1;
+                console.log(`Game speed changed to ${gameSpeed}x`);
+                return;
+            }
+
             isDrawing = true;
             currentLine = [pos];
         });
@@ -793,6 +868,9 @@
 
             // Draw UI
             drawUI();
+
+            // Draw speed button
+            drawSpeedButton();
         }
 
         function drawUI() {
@@ -803,8 +881,8 @@
             ctx.font = 'bold 24px Arial';
             ctx.textAlign = 'right';
 
-            // Timer in top right
-            const remainingTime = Math.max(0, levelTime - (Date.now() - gameStartTime));
+            // Timer in top right - use accumulated time
+            const remainingTime = Math.max(0, levelTime - accumulatedTime);
             const minutes = Math.floor(remainingTime / 60000);
             const seconds = Math.floor((remainingTime % 60000) / 1000);
             const timeText = `${minutes}:${seconds.toString().padStart(2, '0')}`;
@@ -824,6 +902,14 @@
             ctx.strokeText(penguinText, 20, 70);
             ctx.fillText(penguinText, 20, 70);
 
+            // Speed indicator
+            if (gameSpeed > 1) {
+                ctx.font = 'bold 16px Arial';
+                ctx.fillStyle = '#FFD700';
+                ctx.strokeText(`Speed: ${gameSpeed}x`, 20, 100);
+                ctx.fillText(`Speed: ${gameSpeed}x`, 20, 100);
+            }
+
             ctx.restore();
         }
 
@@ -840,6 +926,7 @@
             lemmingsSpawned = 0;
             lemmingsSaved = 0;
             maxLemmings = penguinsForNextLevel; // Only spawn as many as were saved
+            accumulatedTime = 0; // Reset timer properly
 
             // Generate new terrain
             generateTerrain();
@@ -850,26 +937,39 @@
             requestAnimationFrame(gameLoop);
         }
 
+        let lastFrameTime = 0;
+
         function gameLoop(currentTime) {
             if (!gameActive) return;
 
+            // Calculate delta time
+            const deltaTime = lastFrameTime ? currentTime - lastFrameTime : 16.67; // Default to ~60fps
+            lastFrameTime = currentTime;
+
+            // Accumulate time accounting for speed
+            accumulatedTime += deltaTime * gameSpeed;
+
             // Check if time is up
-            const remainingTime = levelTime - (currentTime - gameStartTime);
+            const remainingTime = levelTime - accumulatedTime;
 
             // DEBUG: Log timer info every few seconds
             if (Math.floor(currentTime / 1000) % 5 === 0 && Math.random() < 0.1) {
-                console.log(`Time remaining: ${Math.round(remainingTime / 1000)}s, Saved: ${lemmingsSaved}, Spawned: ${lemmingsSpawned}/${maxLemmings}, Active: ${lemmings.filter(l => l.alive).length}`);
+                console.log(`Time remaining: ${Math.round(remainingTime / 1000)}s, Saved: ${lemmingsSaved}, Spawned: ${lemmingsSpawned}/${maxLemmings}, Active: ${lemmings.filter(l => l.alive).length}, Speed: ${gameSpeed}x`);
             }
 
             if (remainingTime <= 0) {
                 console.log(`TIMER EXPIRED - Saved: ${lemmingsSaved}`);
+                gameActive = false; // Stop the game loop immediately
+
                 if (lemmingsSaved > 0) {
                     // At least 1 penguin saved - advance to next level
-                    setTimeout(() => nextLevel(), 1000);
-                    gameActive = false;
-                    return;
+                    console.log(`Timer expired with ${lemmingsSaved} penguins saved - advancing to next level`);
+                    setTimeout(() => {
+                        nextLevel();
+                    }, 1000);
                 } else {
                     // No penguins saved - game over
+                    console.log(`Timer expired with 0 penguins saved - GAME OVER`);
                     setTimeout(() => {
                         ctx.save();
                         ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
@@ -882,11 +982,10 @@
                         ctx.font = 'bold 24px Arial';
                         ctx.fillText(`Game Over - Level ${currentLevel}`, canvas.width / 2, canvas.height / 2 + 60);
                         ctx.restore();
+                        console.log('Game Over screen displayed');
                     }, 1000);
-
-                    gameActive = false;
-                    return;
                 }
+                return;
             }
 
             // Check if level completed early (all penguins spawned and none still active)
@@ -896,19 +995,25 @@
             if (allPenguinsSpawned && noPenguinsActive && lemmingsSaved > 0) {
                 // All penguins done and some saved - advance to next level
                 console.log(`EARLY COMPLETION - Spawned: ${lemmingsSpawned}, Active: ${lemmings.filter(l => l.alive).length}, Saved: ${lemmingsSaved}`);
-                setTimeout(() => nextLevel(), 1000);
                 gameActive = false;
+                setTimeout(() => {
+                    nextLevel();
+                }, 1000);
                 return;
             }
 
-            // Spawn penguins periodically
-            if (currentTime - lastSpawnTime > SPAWN_INTERVAL) {
+            // Spawn penguins periodically - account for speed
+            const adjustedSpawnInterval = SPAWN_INTERVAL / gameSpeed;
+            if (currentTime - lastSpawnTime > adjustedSpawnInterval) {
                 spawnLemming();
                 lastSpawnTime = currentTime;
             }
 
-            // Update lemmings
-            lemmings.forEach(lemming => lemming.update());
+            // Update lemmings multiple times for speed (preserves collision detection)
+            const updatesPerFrame = gameSpeed;
+            for (let i = 0; i < updatesPerFrame; i++) {
+                lemmings.forEach(lemming => lemming.update());
+            }
 
             // Remove dead lemmings
             lemmings = lemmings.filter(lemming => lemming.alive);
@@ -924,6 +1029,8 @@
         // Initialize game
         generateTerrain();
         gameStartTime = Date.now();
+        accumulatedTime = 0;
+        lastFrameTime = 0;
         requestAnimationFrame(gameLoop);
     </script>
 </body>
