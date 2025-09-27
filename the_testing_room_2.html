@@ -350,11 +350,13 @@
             update() {
                 if (!this.alive) return;
 
-                const feetX = this.x + this.width / 2;
+                // Use front of penguin for ground detection (smoother on platforms)
+                const direction = this.vx > 0 ? 1 : -1;
+                const groundCheckX = this.x + this.width / 2 + (direction * this.width / 4);
                 const feetY = this.y + this.height;
 
                 // Simple ground check
-                if (!isSolidPixel(feetX, feetY + 1)) {
+                if (!isSolidPixel(groundCheckX, feetY + 1)) {
                     // Falling
                     this.vy += 0.5;
                     this.y += this.vy;
@@ -363,9 +365,9 @@
                     // On ground - smooth movement
                     this.vy = 0;
 
-                    // Snap to ground to prevent trembling
+                    // Snap to ground to prevent trembling (using front-weighted position)
                     for (let checkY = feetY - 3; checkY <= feetY + 3; checkY++) {
-                        if (isSolidPixel(feetX, checkY)) {
+                        if (isSolidPixel(groundCheckX, checkY)) {
                             this.y = checkY - this.height;
                             break;
                         }
@@ -391,16 +393,31 @@
                 const speed = Math.abs(this.vx);
                 const newX = this.x + direction * speed;
                 const bodyY = this.y + this.height / 2;
+                const feetY = this.y + this.height;
 
-                // Simple wall check at body level
+                // Check for wall at body level
                 const wallCheckX = direction > 0 ? newX + this.width : newX;
                 if (isSolidPixel(wallCheckX, bodyY)) {
-                    this.vx = -this.vx;
-                    this.lastAction = "hit wall - turning";
-                    return;
+                    // Hit a wall - but can we step up 16px?
+                    const stepHeight = 16;
+                    const stepUpY = feetY - stepHeight;
+
+                    // Check if there's clear space 16px above ground level ahead
+                    if (!isSolidPixel(wallCheckX, stepUpY) && !isSolidPixel(wallCheckX, stepUpY - this.height)) {
+                        // Clear space above - step up and move forward
+                        this.x = newX;
+                        this.y -= stepHeight;
+                        this.lastAction = "stepped up 16px";
+                        return;
+                    } else {
+                        // No space to step up - turn around
+                        this.vx = -this.vx;
+                        this.lastAction = "hit wall - turning";
+                        return;
+                    }
                 }
 
-                // Move forward
+                // No wall - move forward normally
                 this.x = newX;
                 this.lastAction = "walking";
             }
