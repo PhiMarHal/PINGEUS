@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lemmings-Style Bitmap Collision</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #2c3e50;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        canvas {
+            border: 2px solid #34495e;
+            background-color: #87CEEB;
+            margin: 10px;
+            max-width: min(95vw, 71.25vh);
+            max-height: min(95vh, 63.33vw);
+            width: auto;
+            height: auto;
+            display: block;
+        }
+
+        .info-panel {
+            background: rgba(0, 0, 0, 0.8);
+            padding: 10px;
+            margin: 10px;
+            border-radius: 5px;
+            font-size: 14px;
+            text-align: center;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #2980b9;
+        }
+
+        button.active {
+            background-color: #e74c3c;
+        }
+    </style>
+</head>
+
+<body>
+    <canvas id="testCanvas" width="800" height="600"></canvas>
+    <div class="info-panel">
+        Lemmings-Style Bitmap Collision: Entire level stored as single bitmap, pixel-perfect collision
+        <br>This is exactly how Lemmings (1991) worked - simple and efficient!
+    </div>
+
+    <div class="controls">
+        <button onclick="spawnPenguin()">Spawn Penguin</button>
+        <button onclick="clearLines()">Clear Lines</button>
+        <button id="climb8" onclick="changeClimbHeight(8)" class="active">Climb: 8px</button>
+        <button id="climb16" onclick="changeClimbHeight(16)">Climb: 16px</button>
+        <button id="climb32" onclick="changeClimbHeight(32)">Climb: 32px</button>
+        <button id="climb64" onclick="changeClimbHeight(64)">Climb: 64px</button>
+        <button onclick="toggleBitmapView()">Show Collision Bitmap</button>
+    </div>
+
+    <div id="status" style="color: white; text-align: center; margin: 10px;">
+        Max Climb Height: <span id="climbHeight">8</span>px | Press B to toggle bitmap view
+    </div>
+
+    <script>
+        const canvas = document.getElementById('testCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // LEMMINGS-STYLE BITMAP COLLISION SYSTEM
+        let collisionBitmap = null; // ImageData object - our collision map
+        let showBitmap = false;
+
+        let penguins = [];
+        let currentMaxClimbHeight = 8;
+        let isDrawing = false;
+        let currentLine = [];
+        let drawnLines = [];
+
+        const terrainBars = [
+            { angle: 0, y: 100, height: 40 },
+            { angle: 22.5, y: 200, height: 40 },
+            { angle: 45, y: 300, height: 40 },
+            { angle: 67.5, y: 400, height: 40 },
+            { angle: 90, y: 500, height: 40 }
+        ];
+
+        // Initialize the collision bitmap
+        function initCollisionBitmap() {
+            collisionBitmap = ctx.createImageData(canvas.width, canvas.height);
+
+            // Fill with "air" (transparent/empty)
+            for (let i = 0; i < collisionBitmap.data.length; i += 4) {
+                collisionBitmap.data[i] = 135;     // R - sky blue
+                collisionBitmap.data[i + 1] = 206; // G
+                collisionBitmap.data[i + 2] = 235; // B
+                collisionBitmap.data[i + 3] = 255; // A
+            }
+        }
+
+        // Check if a pixel is solid in the collision bitmap
+        function isSolidPixel(x, y) {
+            x = Math.floor(x);
+            y = Math.floor(y);
+
+            if (x < 0 || x >= canvas.width || y < 0 || y >= canvas.height) {
+                return true; // Boundaries are solid
+            }
+
+            const index = (y * canvas.width + x) * 4;
+            const r = collisionBitmap.data[index];
+            const g = collisionBitmap.data[index + 1];
+            const b = collisionBitmap.data[index + 2];
+
+            // Brown pixels (terrain) and blue pixels (drawn lines) are solid
+            // Sky blue pixels are empty
+            return !((r > 120 && r < 150 && g > 190 && g < 220 && b > 220)); // Not sky blue = solid
+        }
+
+        // Set pixel in collision bitmap (for drawing terrain/lines)
+        function setSolidPixel(x, y, r, g, b) {
+            x = Math.floor(x);
+            y = Math.floor(y);
+
+            if (x < 0 || x >= canvas.width || y < 0 || y >= canvas.height) return;
+
+            const index = (y * canvas.width + x) * 4;
+            collisionBitmap.data[index] = r;
+            collisionBitmap.data[index + 1] = g;
+            collisionBitmap.data[index + 2] = b;
+            collisionBitmap.data[index + 3] = 255;
+        }
+
+        // Clear pixel in collision bitmap (for explosions)
+        function clearPixel(x, y) {
+            x = Math.floor(x);
+            y = Math.floor(y);
+
+            if (x < 0 || x >= canvas.width || y < 0 || y >= canvas.height) return;
+
+            const index = (y * canvas.width + x) * 4;
+            collisionBitmap.data[index] = 135;     // Sky blue
+            collisionBitmap.data[index + 1] = 206;
+            collisionBitmap.data[index + 2] = 235;
+            collisionBitmap.data[index + 3] = 255;
+        }
+
+        // Draw line into collision bitmap (Bresenham's algorithm)
+        function drawLineInBitmap(x1, y1, x2, y2, r, g, b, thickness = 8) {
+            const dx = Math.abs(x2 - x1);
+            const dy = Math.abs(y2 - y1);
+            const sx = x1 < x2 ? 1 : -1;
+            const sy = y1 < y2 ? 1 : -1;
+            let err = dx - dy;
+
+            let x = Math.floor(x1);
+            let y = Math.floor(y1);
+            const halfThick = Math.floor(thickness / 2);
+
+            while (true) {
+                // Draw thick line by filling circle around each point
+                for (let dx = -halfThick; dx <= halfThick; dx++) {
+                    for (let dy = -halfThick; dy <= halfThick; dy++) {
+                        if (dx * dx + dy * dy <= halfThick * halfThick) {
+                            setSolidPixel(x + dx, y + dy, r, g, b);
+                        }
+                    }
+                }
+
+                if (x === Math.floor(x2) && y === Math.floor(y2)) break;
+
+                const e2 = 2 * err;
+                if (e2 > -dy) {
+                    err -= dy;
+                    x += sx;
+                }
+                if (e2 < dx) {
+                    err += dx;
+                    y += sy;
+                }
+            }
+        }
+
+        // Generate terrain in collision bitmap
+        function generateTerrainBitmap() {
+            const centerX = canvas.width * 0.9;
+            const centerY = canvas.height * 0.2;
+            const platformThickness = 40;
+
+            terrainBars.forEach(bar => {
+                const angleRad = (bar.angle * Math.PI) / 180;
+                const platformLength = canvas.width * 1.5;
+
+                const startX = centerX;
+                const startY = centerY;
+                const endX = startX - Math.cos(angleRad) * platformLength;
+                const endY = startY + Math.sin(angleRad) * platformLength;
+
+                // Draw brown terrain into bitmap
+                drawLineInBitmap(startX, startY, endX, endY, 139, 69, 19, platformThickness);
+            });
+        }
+
+        // Clear explosion circle from bitmap
+        function clearExplosionCircle(centerX, centerY, radius) {
+            for (let dx = -radius; dx <= radius; dx++) {
+                for (let dy = -radius; dy <= radius; dy++) {
+                    if (dx * dx + dy * dy <= radius * radius) {
+                        clearPixel(centerX + dx, centerY + dy);
+                    }
+                }
+            }
+        }
+
+        class Penguin {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.vx = 0.5;
+                this.vy = 0;
+                this.width = 20;
+                this.height = 30;
+                this.alive = true;
+                this.maxClimbHeight = currentMaxClimbHeight;
+                this.lastAction = "spawned";
+            }
+
+            update() {
+                if (!this.alive) return;
+
+                const feetX = this.x + this.width / 2;
+                const feetY = this.y + this.height;
+
+                // Simple gravity check using bitmap
+                if (!isSolidPixel(feetX, feetY + 1)) {
+                    // Falling
+                    this.vy += 0.5;
+                    this.y += this.vy;
+                    this.lastAction = "falling";
+                } else {
+                    // On ground
+                    this.vy = 0;
+                    this.attemptMovement();
+                }
+
+                // Screen boundaries
+                if (this.x <= 0 || this.x >= canvas.width - this.width) {
+                    this.vx = -this.vx;
+                    this.x = Math.max(0, Math.min(canvas.width - this.width, this.x));
+                    this.lastAction = "hit boundary";
+                }
+
+                if (this.y > canvas.height + 100) {
+                    this.alive = false;
+                }
+            }
+
+            attemptMovement() {
+                const direction = this.vx > 0 ? 1 : -1;
+                const speed = Math.abs(this.vx);
+                const newX = this.x + direction * speed;
+                const feetX = newX + this.width / 2;
+                const feetY = this.y + this.height;
+                const bodyY = this.y + this.height / 2;
+
+                // Check for wall at body level (Lemmings-style collision)
+                const wallCheckX = direction > 0 ? newX + this.width : newX;
+                if (isSolidPixel(wallCheckX, bodyY)) {
+                    this.vx = -this.vx;
+                    this.lastAction = "hit wall - turning";
+                    return;
+                }
+
+                // Check what's ahead at ground level
+                if (isSolidPixel(feetX, feetY)) {
+                    // There's an obstacle - check if we can climb it
+                    let climbHeight = 0;
+
+                    // Scan upward to find how high the obstacle is
+                    for (let h = 1; h <= this.maxClimbHeight + 5; h++) {
+                        if (!isSolidPixel(feetX, feetY - h)) {
+                            climbHeight = h;
+                            break;
+                        }
+                    }
+
+                    if (climbHeight > 0 && climbHeight <= this.maxClimbHeight) {
+                        // Can climb - step up
+                        this.x = newX;
+                        this.y -= climbHeight;
+                        this.lastAction = `climbed ${climbHeight}px`;
+                    } else {
+                        // Too high - turn around
+                        this.vx = -this.vx;
+                        this.lastAction = `obstacle too high (${climbHeight}px) - turning`;
+                    }
+                } else {
+                    // No obstacle at feet level - move forward
+                    this.x = newX;
+                    this.lastAction = "walking";
+                }
+            }
+
+            draw() {
+                if (!this.alive) return;
+
+                ctx.save();
+                ctx.fillStyle = '#FFA500';
+                ctx.strokeStyle = '#000';
+                ctx.lineWidth = 1;
+
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+                ctx.strokeRect(this.x, this.y, this.width, this.height);
+
+                // Direction indicator
+                ctx.fillStyle = '#000';
+                const eyeX = this.vx > 0 ? this.x + this.width - 3 : this.x + 1;
+                ctx.fillRect(eyeX, this.y + 2, 2, 2);
+
+                // Climb height indicator
+                ctx.fillStyle = '#FF0000';
+                ctx.font = '10px Arial';
+                ctx.fillText(`${this.maxClimbHeight}px`, this.x, this.y - 5);
+
+                // Action indicator
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = '8px Arial';
+                ctx.fillText(this.lastAction, this.x - 10, this.y - 15);
+
+                ctx.restore();
+            }
+        }
+
+        function getMousePos(event) {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            return {
+                x: (event.clientX - rect.left) * scaleX,
+                y: (event.clientY - rect.top) * scaleY
+            };
+        }
+
+        // Line drawing events
+        canvas.addEventListener('mousedown', function (event) {
+            const pos = getMousePos(event);
+            isDrawing = true;
+            currentLine = [pos];
+        });
+
+        canvas.addEventListener('mousemove', function (event) {
+            if (!isDrawing) return;
+            const pos = getMousePos(event);
+            currentLine.push(pos);
+        });
+
+        canvas.addEventListener('mouseup', function (event) {
+            if (!isDrawing) return;
+            isDrawing = false;
+
+            if (currentLine.length > 1) {
+                const intersections = findIntersections(currentLine, drawnLines);
+
+                if (intersections.length > 0) {
+                    intersections.forEach(point => {
+                        const totalLength = getLineLength(currentLine) + getLineLength(point.intersectingLine);
+                        createExplosion(point.x, point.y, totalLength);
+
+                        const lineIndex = drawnLines.indexOf(point.intersectingLine);
+                        if (lineIndex > -1) {
+                            drawnLines.splice(lineIndex, 1);
+                        }
+                    });
+                } else {
+                    // Add line to visual list and bitmap
+                    drawnLines.push([...currentLine]);
+
+                    // Draw blue line into collision bitmap
+                    for (let i = 0; i < currentLine.length - 1; i++) {
+                        drawLineInBitmap(
+                            currentLine[i].x, currentLine[i].y,
+                            currentLine[i + 1].x, currentLine[i + 1].y,
+                            0, 102, 255, 8 // Blue color
+                        );
+                    }
+                }
+            }
+            currentLine = [];
+        });
+
+        function getLineLength(line) {
+            if (line.length < 2) return 0;
+            let totalLength = 0;
+            for (let i = 1; i < line.length; i++) {
+                const dx = line[i].x - line[i - 1].x;
+                const dy = line[i].y - line[i - 1].y;
+                totalLength += Math.sqrt(dx * dx + dy * dy);
+            }
+            return totalLength;
+        }
+
+        function findIntersections(newLine, existingLines) {
+            const intersections = [];
+            for (let existingLine of existingLines) {
+                for (let i = 0; i < newLine.length - 1; i++) {
+                    const newSegment = { start: newLine[i], end: newLine[i + 1] };
+                    for (let j = 0; j < existingLine.length - 1; j++) {
+                        const existingSegment = { start: existingLine[j], end: existingLine[j + 1] };
+                        const intersection = getLineIntersection(newSegment, existingSegment);
+                        if (intersection) {
+                            intersections.push({
+                                x: intersection.x,
+                                y: intersection.y,
+                                intersectingLine: existingLine
+                            });
+                        }
+                    }
+                }
+            }
+            return intersections;
+        }
+
+        function getLineIntersection(line1, line2) {
+            const x1 = line1.start.x, y1 = line1.start.y;
+            const x2 = line1.end.x, y2 = line1.end.y;
+            const x3 = line2.start.x, y3 = line2.start.y;
+            const x4 = line2.end.x, y4 = line2.end.y;
+
+            const denominator = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+            if (Math.abs(denominator) < 0.0001) return null;
+
+            const t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denominator;
+            const u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / denominator;
+
+            if (t >= 0 && t <= 1 && u >= 0 && u <= 1) {
+                return {
+                    x: x1 + t * (x2 - x1),
+                    y: y1 + t * (y2 - y1)
+                };
+            }
+            return null;
+        }
+
+        function createExplosion(x, y, totalLineLength) {
+            const radius = Math.max(20, totalLineLength * 0.05);
+
+            // Clear from collision bitmap (Lemmings-style)
+            clearExplosionCircle(x, y, radius);
+
+            console.log(`Bitmap explosion at (${Math.round(x)}, ${Math.round(y)}) radius ${Math.round(radius)}`);
+        }
+
+        function spawnPenguin() {
+            const penguin = new Penguin(50, 20);
+            penguin.maxClimbHeight = currentMaxClimbHeight;
+            penguins.push(penguin);
+            console.log(`Spawned penguin with climb height: ${currentMaxClimbHeight}px`);
+        }
+
+        function clearLines() {
+            drawnLines = [];
+            // Regenerate collision bitmap
+            initCollisionBitmap();
+            generateTerrainBitmap();
+            console.log('Cleared lines and regenerated bitmap');
+        }
+
+        function changeClimbHeight(height) {
+            currentMaxClimbHeight = height;
+            document.getElementById('climbHeight').textContent = height;
+
+            document.querySelectorAll('.controls button').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`climb${height}`).classList.add('active');
+
+            penguins.forEach(penguin => {
+                penguin.maxClimbHeight = height;
+            });
+        }
+
+        function toggleBitmapView() {
+            showBitmap = !showBitmap;
+            console.log(`Collision bitmap view: ${showBitmap}`);
+        }
+
+        // Keyboard controls
+        document.addEventListener('keydown', function (event) {
+            if (event.key.toLowerCase() === 'b') {
+                toggleBitmapView();
+            }
+        });
+
+        function drawGame() {
+            if (showBitmap) {
+                // Show collision bitmap directly
+                ctx.putImageData(collisionBitmap, 0, 0);
+            } else {
+                // Draw visual representation
+                ctx.fillStyle = '#87CEEB';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // Draw terrain visually
+                const centerX = canvas.width * 0.9;
+                const centerY = canvas.height * 0.2;
+                ctx.fillStyle = '#8B4513';
+                ctx.strokeStyle = '#654321';
+                ctx.lineWidth = 2;
+
+                terrainBars.forEach(bar => {
+                    ctx.save();
+                    const angleRad = (bar.angle * Math.PI) / 180;
+                    const platformLength = canvas.width * 1.5;
+                    const platformThickness = 40;
+
+                    const startX = centerX;
+                    const startY = centerY;
+                    const endX = startX - Math.cos(angleRad) * platformLength;
+                    const endY = startY + Math.sin(angleRad) * platformLength;
+
+                    ctx.beginPath();
+                    ctx.moveTo(startX, startY - platformThickness / 2);
+                    ctx.lineTo(endX, endY - platformThickness / 2);
+                    ctx.lineTo(endX, endY + platformThickness / 2);
+                    ctx.lineTo(startX, startY + platformThickness / 2);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.stroke();
+                    ctx.restore();
+                });
+
+                // Draw angle labels
+                terrainBars.forEach(bar => {
+                    const angleRad = (bar.angle * Math.PI) / 180;
+                    let labelDistance = 200;
+                    const labelX = centerX - Math.cos(angleRad) * labelDistance;
+                    const labelY = centerY + Math.sin(angleRad) * labelDistance;
+
+                    ctx.save();
+                    ctx.fillStyle = '#FFFFFF';
+                    ctx.strokeStyle = '#000';
+                    ctx.lineWidth = 1;
+                    ctx.font = 'bold 16px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.strokeText(`${bar.angle}°`, labelX, labelY);
+                    ctx.fillText(`${bar.angle}°`, labelX, labelY);
+                    ctx.restore();
+                });
+
+                // Draw current line being drawn
+                if (isDrawing && currentLine.length > 1) {
+                    ctx.save();
+                    ctx.strokeStyle = '#00FF00';
+                    ctx.lineWidth = 8;
+                    ctx.lineCap = 'round';
+                    ctx.globalAlpha = 0.7;
+                    ctx.beginPath();
+                    ctx.moveTo(currentLine[0].x, currentLine[0].y);
+                    for (let i = 1; i < currentLine.length; i++) {
+                        ctx.lineTo(currentLine[i].x, currentLine[i].y);
+                    }
+                    ctx.stroke();
+                    ctx.restore();
+                }
+
+                // Draw completed lines
+                drawnLines.forEach(line => {
+                    if (line.length < 2) return;
+                    ctx.save();
+                    ctx.strokeStyle = '#0066FF';
+                    ctx.lineWidth = 8;
+                    ctx.lineCap = 'round';
+                    ctx.lineJoin = 'round';
+                    ctx.beginPath();
+                    ctx.moveTo(line[0].x, line[0].y);
+                    for (let i = 1; i < line.length; i++) {
+                        ctx.lineTo(line[i].x, line[i].y);
+                    }
+                    ctx.stroke();
+                    ctx.restore();
+                });
+            }
+
+            // Draw penguins
+            penguins.forEach(penguin => penguin.draw());
+
+            // Show debug info
+            ctx.save();
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(10, 10, 200, 60);
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = '12px Arial';
+            ctx.fillText(`Penguins: ${penguins.length}`, 20, 30);
+            ctx.fillText(`Bitmap view: ${showBitmap ? 'ON' : 'OFF'}`, 20, 45);
+            ctx.fillText('Press B to toggle bitmap', 20, 60);
+            ctx.restore();
+        }
+
+        function gameLoop() {
+            penguins.forEach(penguin => penguin.update());
+            penguins = penguins.filter(penguin => penguin.alive);
+            drawGame();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Initialize
+        initCollisionBitmap();
+        generateTerrainBitmap();
+        requestAnimationFrame(gameLoop);
+    </script>
+</body>
+
+</html>
