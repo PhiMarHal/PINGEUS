@@ -41,11 +41,6 @@
 
 <body>
     <canvas id="terrainCanvas" width="800" height="1200"></canvas>
-    <div class="info-panel">
-        Draw lines to guide penguins! Lines explode when they intersect.
-        <br>Green = Entrance, Red = Exit | Save penguins to advance levels!
-        <br>Click speed button (bottom right) to toggle 8x speed
-    </div>
 
     <script>
         const canvas = document.getElementById('terrainCanvas');
@@ -123,7 +118,7 @@
             constructor(x, y) {
                 this.x = x;
                 this.y = y;
-                this.vx = 0.5;
+                this.vx = 0.125;
                 this.vy = 0;
                 this.width = 20;
                 this.height = 30;
@@ -496,8 +491,8 @@
 
             // Arrow symbols with animation
             ctx.fillStyle = '#fff';
-            ctx.font = 'bold 12px Arial';
-            ctx.textAlign = 'left';
+            ctx.font = 'bold 18px Arial';
+            ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
 
             if (button.pressed) {
@@ -507,8 +502,9 @@
 
                 // Draw arrows with lighting up effect
                 const arrowY = button.y + button.height / 2;
-                const startX = button.x + 8;
-                const spacing = 12;
+                const spacing = 14;
+                const totalWidth = spacing * 2; // Width of 3 arrows with 2 gaps
+                const startX = button.x + button.width / 2 - totalWidth / 2;
 
                 for (let i = 0; i < 3; i++) {
                     if (i <= cycle) {
@@ -523,7 +519,6 @@
             } else {
                 // Draw single > when not pressed
                 ctx.fillStyle = '#fff';
-                ctx.textAlign = 'center';
                 ctx.fillText('>', button.x + button.width / 2, button.y + button.height / 2);
                 button.animationFrame = 0;
             }
@@ -622,7 +617,7 @@
 
                     // Add all new explosion holes to the array first
                     explosions.forEach(explosion => {
-                        const radius = Math.max(20, explosion.totalLength * 0.05);
+                        const radius = explosion.totalLength * 0.20; // Pure linear scaling, no minimum
                         const numPoints = 12 + Math.floor(Math.random() * 8);
                         const explosionPoints = [];
 
@@ -815,7 +810,7 @@
             ctx.fillStyle = '#FFFFFF';
             ctx.strokeStyle = '#000000';
             ctx.lineWidth = 2;
-            ctx.font = 'bold 24px Arial';
+            ctx.font = 'bold 36px Arial';
             ctx.textAlign = 'right';
 
             // Timer in top right - use accumulated time
@@ -829,22 +824,22 @@
 
             // Level and penguin count
             ctx.textAlign = 'left';
-            ctx.font = 'bold 20px Arial';
+            ctx.font = 'bold 30px Arial';
             const levelText = `Level ${currentLevel}`;
             const penguinText = `Penguins: ${lemmingsSaved}/${lemmingsSpawned}`;
 
             ctx.strokeText(levelText, 20, 40);
             ctx.fillText(levelText, 20, 40);
 
-            ctx.strokeText(penguinText, 20, 70);
-            ctx.fillText(penguinText, 20, 70);
+            ctx.strokeText(penguinText, 20, 80);
+            ctx.fillText(penguinText, 20, 80);
 
             // Speed indicator
             if (gameSpeed > 1) {
-                ctx.font = 'bold 16px Arial';
+                ctx.font = 'bold 24px Arial';
                 ctx.fillStyle = '#FFD700';
-                ctx.strokeText(`Speed: ${gameSpeed}x`, 20, 100);
-                ctx.fillText(`Speed: ${gameSpeed}x`, 20, 100);
+                ctx.strokeText(`Speed: ${gameSpeed}x`, 20, 120);
+                ctx.fillText(`Speed: ${gameSpeed}x`, 20, 120);
             }
 
             ctx.restore();
