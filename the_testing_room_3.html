@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Final Working Penguin Collision System</title>
+    <title>Fixed Penguin Collision System</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -68,7 +68,7 @@
 <body>
     <canvas id="testCanvas" width="800" height="600"></canvas>
     <div class="info-panel">
-        Draw lines to guide penguins! Lines explode when they intersect.
+        Draw lines to guide penguins! Lines explode when they intersect. Fixed jittering on step-up!
     </div>
 
     <div class="controls">
@@ -345,6 +345,7 @@
                 this.height = 30;
                 this.alive = true;
                 this.lastAction = "spawned";
+                this.justSteppedUp = false; // NEW: Simple flag to prevent immediate ground snap after step-up
             }
 
             update() {
@@ -361,16 +362,23 @@
                     this.vy += 0.5;
                     this.y += this.vy;
                     this.lastAction = "falling";
+                    this.justSteppedUp = false; // Clear flag when falling
                 } else {
                     // On ground - smooth movement
                     this.vy = 0;
 
-                    // Snap to ground to prevent trembling (using front-weighted position)
-                    for (let checkY = feetY - 3; checkY <= feetY + 3; checkY++) {
-                        if (isSolidPixel(groundCheckX, checkY)) {
-                            this.y = checkY - this.height;
-                            break;
+                    // FIXED: Only snap to ground if we didn't just step up
+                    if (!this.justSteppedUp) {
+                        // Snap to ground to prevent trembling (using front-weighted position)
+                        for (let checkY = feetY - 3; checkY <= feetY + 3; checkY++) {
+                            if (isSolidPixel(groundCheckX, checkY)) {
+                                this.y = checkY - this.height;
+                                break;
+                            }
                         }
+                    } else {
+                        // Clear the flag after one frame to allow normal snapping again
+                        this.justSteppedUp = false;
                     }
 
                     this.attemptMovement();
@@ -399,7 +407,7 @@
                 const wallCheckX = direction > 0 ? newX + this.width : newX;
                 if (isSolidPixel(wallCheckX, bodyY)) {
                     // Hit a wall - but can we step up 16px?
-                    const stepHeight = 32;
+                    const stepHeight = 16;
                     const stepUpY = feetY - stepHeight;
 
                     // Check if there's clear space 16px above ground level ahead
@@ -407,6 +415,7 @@
                         // Clear space above - step up and move forward
                         this.x = newX;
                         this.y -= stepHeight;
+                        this.justSteppedUp = true; // NEW: Set flag to prevent ground snapping next frame
                         this.lastAction = "stepped up 16px";
                         return;
                     } else {
@@ -493,21 +502,37 @@
                         });
                     });
 
-                    // Remove all intersecting lines at once
-                    linesToRemove.forEach(lineToRemove => {
-                        const lineIndex = drawnLines.indexOf(lineToRemove);
-                        if (lineIndex > -1) {
-                            drawnLines.splice(lineIndex, 1);
-                        }
-                    });
+                    // Filter out all intersecting lines at once (avoids index shifting bugs)
+                    drawnLines = drawnLines.filter(line => !linesToRemove.includes(line));
 
-                    // Regenerate canvases once with remaining lines
-                    regenerateCanvases();
-
-                    // Create all explosions
+                    // Add all new explosion holes to the array first
                     explosions.forEach(explosion => {
-                        createExplosion(explosion.x, explosion.y, explosion.totalLength);
+                        const radius = Math.max(20, explosion.totalLength * 0.05);
+                        const numPoints = 12 + Math.floor(Math.random() * 8);
+                        const explosionPoints = [];
+
+                        for (let i = 0; i < numPoints; i++) {
+                            const angle = (i / numPoints) * Math.PI * 2;
+                            const radiusVariation = 0.6 + Math.random() * 0.8;
+                            const finalRadius = radius * radiusVariation;
+                            const angleNoise = (Math.random() - 0.5) * 0.3;
+                            const finalAngle = angle + angleNoise;
+
+                            explosionPoints.push({
+                                x: explosion.x + Math.cos(finalAngle) * finalRadius,
+                                y: explosion.y + Math.sin(finalAngle) * finalRadius
+                            });
+                        }
+
+                        explosionHoles.push({
+                            x: explosion.x,
+                            y: explosion.y,
+                            explosionPoints: explosionPoints
+                        });
                     });
+
+                    // Regenerate canvases only once with all remaining lines and all explosion holes
+                    regenerateCanvases();
 
                     console.log(`Removed ${linesToRemove.length} intersecting lines, created ${explosions.length} explosions`);
                 } else {

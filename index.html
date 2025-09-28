@@ -51,7 +51,14 @@
         const canvas = document.getElementById('terrainCanvas');
         const ctx = canvas.getContext('2d');
 
-        // Create off-screen terrain canvas that preserves explosions
+        // ===== DUAL CANVAS SYSTEM (from testing room) =====
+        // Off-screen collision canvas (optimized for performance)
+        const collisionCanvas = document.createElement('canvas');
+        collisionCanvas.width = canvas.width;
+        collisionCanvas.height = canvas.height;
+        const collisionCtx = collisionCanvas.getContext('2d');
+
+        // Visual terrain canvas (for persistent explosions)
         const terrainCanvas = document.createElement('canvas');
         terrainCanvas.width = canvas.width;
         terrainCanvas.height = canvas.height;
@@ -68,6 +75,7 @@
         let maxLemmings = 40;
         let lemmingsSpawned = 0;
         let lemmingsSaved = 0;
+        let explosionHoles = []; // Track explosion holes for persistence
 
         // Game state - added level progression
         let levelTime = 120000;
@@ -92,113 +100,79 @@
         let currentLine = [];
         let drawnLines = [];
 
-        // Lemming class - EXACT copy from working index.html
+        // ===== IMPROVED COLLISION DETECTION (from testing room) =====
+        function isSolidPixel(x, y) {
+            x = Math.floor(x);
+            y = Math.floor(y);
+
+            if (x < 0 || x >= canvas.width || y < 0 || y >= canvas.height) {
+                return true; // Boundaries are solid
+            }
+
+            // Fast single-pixel check from collision canvas
+            const imageData = collisionCtx.getImageData(x, y, 1, 1);
+            const data = imageData.data;
+
+            // Check if there's any non-transparent pixel (collision detection)
+            // Any color with alpha > 128 is considered solid
+            return data[3] > 128;
+        }
+
+        // ===== IMPROVED PENGUIN CLASS (from testing room) =====
         class Lemming {
             constructor(x, y) {
                 this.x = x;
                 this.y = y;
-                this.vx = 0.25;
+                this.vx = 0.5;
                 this.vy = 0;
-                this.width = 30;
-                this.height = 40;
+                this.width = 20;
+                this.height = 30;
                 this.alive = true;
-                this.climbingRemaining = 0; // How much more we need to climb
-                this.maxClimbHeight = 64; // Can climb up to 64px total
-                this.climbRate = 2; // Climb 2px per frame (smoother)
+                this.lastAction = "spawned";
+                this.justSteppedUp = false; // Prevent jittering after step-up
             }
 
             update() {
                 if (!this.alive) return;
 
-                // Simple pixel-based collision detection
-                const feetX = this.x + this.width / 2;
+                // Use front of penguin for ground detection (smoother on platforms)
+                const direction = this.vx > 0 ? 1 : -1;
+                const groundCheckX = this.x + this.width / 2 + (direction * this.width / 4);
                 const feetY = this.y + this.height;
-                const headY = this.y + 2;
-                const bodyY = this.y + this.height / 2;
 
-                // Check if pixel under feet is background (should fall)
-                const pixelUnderFeet = this.getPixelColor(feetX, feetY + 1);
-                const shouldFall = this.isBackground(pixelUnderFeet);
-
-                if (shouldFall) {
-                    // Falling - apply gravity
+                // Simple ground check
+                if (!isSolidPixel(groundCheckX, feetY + 1)) {
+                    // Falling
                     this.vy += 0.5;
                     this.y += this.vy;
+                    this.lastAction = "falling";
+                    this.justSteppedUp = false; // Clear flag when falling
                 } else {
-                    // On ground - stop falling and try to move horizontally
+                    // On ground - smooth movement
                     this.vy = 0;
 
-                    // Check if there's a wall directly ahead at body level
-                    const aheadX = this.vx > 0 ? this.x + this.width + 1 : this.x - 1;
-                    const pixelAhead = this.getPixelColor(aheadX, bodyY);
-                    const wallAhead = this.isSolid(pixelAhead);
-
-                    if (wallAhead) {
-                        // Hit wall, turn around
-                        this.vx = -this.vx;
-                    } else {
-                        // On ground - check if we're in the middle of climbing
-                        if (this.climbingRemaining > 0) {
-                            // Continue gradual climbing
-                            const climbThisFrame = Math.min(this.climbRate, this.climbingRemaining);
-                            this.y -= climbThisFrame;
-                            this.climbingRemaining -= climbThisFrame;
-                            this.x += this.vx; // Keep moving forward while climbing
-                        } else {
-                            // Not climbing - check for new obstacles
-                            const aheadX = this.vx > 0 ? this.x + this.width + 1 : this.x - 1;
-                            const pixelAhead = this.getPixelColor(aheadX, bodyY);
-                            const wallAhead = this.isSolid(pixelAhead);
-
-                            if (wallAhead) {
-                                // Hit wall, turn around
-                                this.vx = -this.vx;
-
-                                // Safety check: make sure we're not inside the wall after turning
-                                const newAheadX = this.vx > 0 ? this.x + this.width + 1 : this.x - 1;
-                                const pixelNewDirection = this.getPixelColor(newAheadX, bodyY);
-                                if (this.isSolid(pixelNewDirection)) {
-                                    // Still blocked in new direction - move away from wall
-                                    this.x += this.vx > 0 ? -2 : 2;
-                                }
-                            } else {
-                                // Check for obstacles at feet level
-                                const pixelAheadFeet = this.getPixelColor(aheadX, feetY);
-
-                                if (this.isSolid(pixelAheadFeet)) {
-                                    // Found obstacle - measure how high we need to climb
-                                    let obstacleHeight = 0;
-
-                                    for (let height = 1; height <= this.maxClimbHeight; height++) {
-                                        const checkY = feetY - height;
-                                        const pixelAtHeight = this.getPixelColor(aheadX, checkY);
-
-                                        if (this.isBackground(pixelAtHeight)) {
-                                            obstacleHeight = height;
-                                            break;
-                                        }
-                                    }
-
-                                    if (obstacleHeight > 0 && obstacleHeight <= this.maxClimbHeight) {
-                                        // Start gradual climbing
-                                        this.climbingRemaining = obstacleHeight;
-                                    } else {
-                                        // Too high - turn around
-                                        this.vx = -this.vx;
-                                    }
-                                } else {
-                                    // Clear path - move forward
-                                    this.x += this.vx;
-                                }
+                    // Only snap to ground if we didn't just step up
+                    if (!this.justSteppedUp) {
+                        // Snap to ground to prevent trembling (using front-weighted position)
+                        for (let checkY = feetY - 3; checkY <= feetY + 3; checkY++) {
+                            if (isSolidPixel(groundCheckX, checkY)) {
+                                this.y = checkY - this.height;
+                                break;
                             }
                         }
+                    } else {
+                        // Clear the flag after one frame to allow normal snapping again
+                        this.justSteppedUp = false;
                     }
+
+                    this.attemptMovement();
                 }
 
                 // Screen boundaries
                 if (this.x <= 0 || this.x >= canvas.width - this.width) {
                     this.vx = -this.vx;
                     this.x = Math.max(0, Math.min(canvas.width - this.width, this.x));
+                    this.lastAction = "hit boundary";
                 }
 
                 // Check if reached exit
@@ -216,97 +190,39 @@
                 }
             }
 
-            getPixelColor(x, y) {
-                // Get pixel color - check BOTH canvases and prioritize lines over terrain
-                x = Math.floor(x);
-                y = Math.floor(y);
+            attemptMovement() {
+                const direction = this.vx > 0 ? 1 : -1;
+                const speed = Math.abs(this.vx);
+                const newX = this.x + direction * speed;
+                const bodyY = this.y + this.height / 2;
+                const feetY = this.y + this.height;
 
-                if (x < 0 || x >= canvas.width || y < 0 || y >= canvas.height) {
-                    return [139, 69, 19, 255]; // Return terrain color for boundaries
-                }
+                // Check for wall at body level
+                const wallCheckX = direction > 0 ? newX + this.width : newX;
+                if (isSolidPixel(wallCheckX, bodyY)) {
+                    // Hit a wall - but can we step up 16px?
+                    const stepHeight = 16;
+                    const stepUpY = feetY - stepHeight;
 
-                // Check main canvas FIRST for lines (green and blue)
-                const mainData = ctx.getImageData(x, y, 1, 1);
-                const mainPixel = [mainData.data[0], mainData.data[1], mainData.data[2], mainData.data[3]];
-
-                // If main canvas has a line (green or blue), prioritize that
-                if (this.isLinePixel(mainPixel)) {
-                    return mainPixel;
-                }
-
-                // Otherwise check terrain canvas
-                const terrainData = terrainCtx.getImageData(x, y, 1, 1);
-                const terrainPixel = [terrainData.data[0], terrainData.data[1], terrainData.data[2], terrainData.data[3]];
-                return terrainPixel;
-            }
-
-            isLinePixel(pixel) {
-                const [r, g, b] = pixel;
-
-                // Check if this is a blue line pixel
-                if (Math.abs(r - 0) <= 5 && Math.abs(g - 102) <= 5 && Math.abs(b - 255) <= 5) return true;
-
-                // Check if this is a green line pixel  
-                if (Math.abs(r - 0) <= 5 && Math.abs(g - 255) <= 5 && Math.abs(b - 0) <= 5) return true;
-
-                return false;
-            }
-
-            isBackground(pixel) {
-                // Check if pixel is any shade of blue background
-                const [r, g, b] = pixel;
-
-                // FIRST: Exclude blue lines and green lines - they're NOT background!
-                if (this.isLinePixel(pixel)) {
-                    return false; // Lines are solid, not background
-                }
-
-                // Black pixels (destroyed terrain holes) should be background
-                if (r < 10 && g < 10 && b < 10) {
-                    return true; // Black holes are background - penguins should fall through
-                }
-
-                // THEN: Check for sky blue background
-                // More inclusive blue detection - any bluish color should be background
-                // Sky tends to have blue as the dominant color component
-                return (b > r && b > g) || // Blue is dominant
-                    (r > 50 && r < 200 && g > 100 && g < 230 && b > 150); // Broad blue range
-            }
-
-            isSolid(pixel) {
-                const [r, g, b] = pixel;
-
-                // Brown terrain
-                if (r > 100 && r < 150 && g < 80 && b < 50) return true;
-
-                // Blue lines - exact matching for #0066FF (0, 102, 255)
-                if (Math.abs(r - 0) <= 5 && Math.abs(g - 102) <= 5 && Math.abs(b - 255) <= 5) return true;
-
-                // Green lines - exact matching for #00FF00 (0, 255, 0)  
-                if (Math.abs(r - 0) <= 5 && Math.abs(g - 255) <= 5 && Math.abs(b - 0) <= 5) return true;
-
-                // Exclude green entrance circle (let penguins pass through)
-                if (r > 30 && r < 70 && g > 180 && g < 220 && b > 30 && b < 70) return false;
-
-                // Exclude red exit circle (let penguins pass through) 
-                if (r > 200 && r < 270 && g > 30 && g < 80 && b > 30 && b < 80) return false;
-
-                // Exclude black strokes around entrance/exit circles
-                if (r < 30 && g < 30 && b < 30) {
-                    // Check if this black pixel is near entrance or exit
-                    const pixelIsNearEntrance = entrance &&
-                        Math.abs(this.x + this.width / 2 - entrance.x) < 50 &&
-                        Math.abs(this.y + this.height / 2 - entrance.y) < 50;
-                    const pixelIsNearExit = exit &&
-                        Math.abs(this.x + this.width / 2 - exit.x) < 50 &&
-                        Math.abs(this.y + this.height / 2 - exit.y) < 50;
-
-                    if (pixelIsNearEntrance || pixelIsNearExit) {
-                        return false; // Black stroke around spawn points is non-solid
+                    // Check if there's clear space 16px above ground level ahead
+                    if (!isSolidPixel(wallCheckX, stepUpY) && !isSolidPixel(wallCheckX, stepUpY - this.height)) {
+                        // Clear space above - step up and move forward
+                        this.x = newX;
+                        this.y -= stepHeight;
+                        this.justSteppedUp = true; // Set flag to prevent ground snapping next frame
+                        this.lastAction = "stepped up 16px";
+                        return;
+                    } else {
+                        // No space to step up - turn around
+                        this.vx = -this.vx;
+                        this.lastAction = "hit wall - turning";
+                        return;
                     }
                 }
 
-                return false;
+                // No wall - move forward normally
+                this.x = newX;
+                this.lastAction = "walking";
             }
 
             distance(x1, y1, x2, y2) {
@@ -326,8 +242,8 @@
 
                 // Direction indicator
                 ctx.fillStyle = '#000';
-                const eyeX = this.vx > 0 ? this.x + this.width - 4 : this.x + 2;
-                ctx.fillRect(eyeX, this.y + 3, 2, 2);
+                const eyeX = this.vx > 0 ? this.x + this.width - 3 : this.x + 1;
+                ctx.fillRect(eyeX, this.y + 2, 2, 2);
 
                 ctx.restore();
             }
@@ -353,6 +269,7 @@
         function generateTerrain() {
             generatePoints();
             terrainShapes = [];
+            explosionHoles = []; // Reset explosion holes
 
             // Generate and store terrain shapes
             for (let i = 0; i < points.length; i++) {
@@ -407,26 +324,49 @@
         }
 
         function drawTerrainOnly() {
-            // Draw terrain to the off-screen terrain canvas
+            // Clear both collision and visual canvases
+            collisionCtx.clearRect(0, 0, collisionCanvas.width, collisionCanvas.height);
             terrainCtx.fillStyle = '#87CEEB';
             terrainCtx.fillRect(0, 0, terrainCanvas.width, terrainCanvas.height);
 
-            // Draw terrain only
-            terrainCtx.fillStyle = '#8B4513';
-            terrainCtx.strokeStyle = '#654321';
-            terrainCtx.lineWidth = 4;
-
+            // Draw terrain to both canvases
             terrainShapes.forEach(blobPoints => {
+                // Draw to collision canvas (solid color for collision detection)
+                collisionCtx.save();
+                collisionCtx.fillStyle = '#8B4513';
+                collisionCtx.beginPath();
+                collisionCtx.moveTo(blobPoints[0].x, blobPoints[0].y);
+
+                for (let j = 1; j < blobPoints.length; j++) {
+                    const current = blobPoints[j];
+                    const next = blobPoints[(j + 1) % blobPoints.length];
+                    const cpX = current.x + (next.x - current.x) * 0.5;
+                    const cpY = current.y + (next.y - current.y) * 0.5;
+                    collisionCtx.quadraticCurveTo(current.x, current.y, cpX, cpY);
+                }
+
+                collisionCtx.quadraticCurveTo(
+                    blobPoints[blobPoints.length - 1].x,
+                    blobPoints[blobPoints.length - 1].y,
+                    blobPoints[0].x,
+                    blobPoints[0].y
+                );
+                collisionCtx.fill();
+                collisionCtx.restore();
+
+                // Draw to visual canvas (styled for appearance)
+                terrainCtx.save();
+                terrainCtx.fillStyle = '#8B4513';
+                terrainCtx.strokeStyle = '#654321';
+                terrainCtx.lineWidth = 4;
                 terrainCtx.beginPath();
                 terrainCtx.moveTo(blobPoints[0].x, blobPoints[0].y);
 
                 for (let j = 1; j < blobPoints.length; j++) {
                     const current = blobPoints[j];
                     const next = blobPoints[(j + 1) % blobPoints.length];
-
                     const cpX = current.x + (next.x - current.x) * 0.5;
                     const cpY = current.y + (next.y - current.y) * 0.5;
-
                     terrainCtx.quadraticCurveTo(current.x, current.y, cpX, cpY);
                 }
 
@@ -436,9 +376,9 @@
                     blobPoints[0].x,
                     blobPoints[0].y
                 );
-
                 terrainCtx.fill();
                 terrainCtx.stroke();
+                terrainCtx.restore();
             });
         }
 
@@ -447,19 +387,16 @@
             ctx.fillStyle = '#87CEEB';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Copy terrain canvas to main canvas
-            ctx.drawImage(terrainCanvas, 0, 0);
+            // Copy collision canvas to main canvas (shows terrain + lines + explosions)
+            ctx.drawImage(collisionCanvas, 0, 0);
 
             // Draw spawn points on main canvas
             drawSpawnPoints();
         }
 
         function isTerrainAt(x, y) {
-            if (x < 0 || x >= terrainCanvas.width || y < 0 || y >= terrainCanvas.height) return false;
-
-            const imageData = terrainCtx.getImageData(x, y, 1, 1);
-            const pixel = imageData.data;
-            return (pixel[0] > 100 && pixel[0] < 150 && pixel[1] < 80 && pixel[2] < 50);
+            if (x < 0 || x >= collisionCanvas.width || y < 0 || y >= collisionCanvas.height) return false;
+            return isSolidPixel(x, y);
         }
 
         function findSpawnPoints() {
@@ -517,6 +454,9 @@
                 entrance = { x: 160, y: entranceY - 50 };
                 exit = { x: canvas.width - 160, y: exitY - 50 };
             }
+
+            // Draw spawn points to collision canvas (they should NOT be solid for penguins)
+            // We'll just draw them visually on the main canvas
         }
 
         function drawSpawnPoints() {
@@ -608,6 +548,23 @@
             };
         }
 
+        // ===== LINE DRAWING (improved from testing room) =====
+        function drawLine(line) {
+            if (line.length < 2) return;
+
+            // Draw to collision canvas (blue, fully opaque)
+            collisionCtx.strokeStyle = 'rgba(0, 102, 255, 255)';
+            collisionCtx.lineWidth = 12;
+            collisionCtx.lineCap = 'round';
+            collisionCtx.lineJoin = 'round';
+            collisionCtx.beginPath();
+            collisionCtx.moveTo(line[0].x, line[0].y);
+            for (let i = 1; i < line.length; i++) {
+                collisionCtx.lineTo(line[i].x, line[i].y);
+            }
+            collisionCtx.stroke();
+        }
+
         // Line drawing events
         canvas.addEventListener('mousedown', function (event) {
             const pos = getMousePos(event);
@@ -640,27 +597,111 @@
                 const intersections = findIntersections(currentLine, drawnLines);
 
                 if (intersections.length > 0) {
-                    // Lines intersected - create explosions and destroy ENTIRE intersecting lines
+                    // Handle all intersections at once - IMPROVED VERSION from testing room
+                    let linesToRemove = [];
+                    let explosions = [];
+
                     intersections.forEach(point => {
                         const totalLength = getLineLength(currentLine) + getLineLength(point.intersectingLine);
-                        createShapeExplosion(point.x, point.y, currentLine, point.intersectingLine, totalLength);
 
-                        // Remove the entire intersecting line from drawnLines
-                        const lineIndex = drawnLines.indexOf(point.intersectingLine);
-                        if (lineIndex > -1) {
-                            drawnLines.splice(lineIndex, 1);
+                        // Collect lines to remove (avoid duplicates)
+                        if (!linesToRemove.includes(point.intersectingLine)) {
+                            linesToRemove.push(point.intersectingLine);
                         }
+
+                        // Collect explosions to create
+                        explosions.push({
+                            x: point.x,
+                            y: point.y,
+                            totalLength: totalLength
+                        });
                     });
 
-                    console.log('Lines intersected and exploded - both lines destroyed');
+                    // FIXED: Use filter() instead of splice() to avoid index shifting bugs
+                    drawnLines = drawnLines.filter(line => !linesToRemove.includes(line));
+
+                    // Add all new explosion holes to the array first
+                    explosions.forEach(explosion => {
+                        const radius = Math.max(20, explosion.totalLength * 0.05);
+                        const numPoints = 12 + Math.floor(Math.random() * 8);
+                        const explosionPoints = [];
+
+                        for (let i = 0; i < numPoints; i++) {
+                            const angle = (i / numPoints) * Math.PI * 2;
+                            const radiusVariation = 0.6 + Math.random() * 0.8;
+                            const finalRadius = radius * radiusVariation;
+                            const angleNoise = (Math.random() - 0.5) * 0.3;
+                            const finalAngle = angle + angleNoise;
+
+                            explosionPoints.push({
+                                x: explosion.x + Math.cos(finalAngle) * finalRadius,
+                                y: explosion.y + Math.sin(finalAngle) * finalRadius
+                            });
+                        }
+
+                        explosionHoles.push({
+                            x: explosion.x,
+                            y: explosion.y,
+                            explosionPoints: explosionPoints
+                        });
+                    });
+
+                    // Regenerate canvases only once with all remaining lines and all explosion holes
+                    regenerateCanvases();
+
+                    console.log(`Removed ${linesToRemove.length} intersecting lines, created ${explosions.length} explosions`);
                 } else {
                     // No intersections - add line normally
                     drawnLines.push([...currentLine]);
+                    drawLine(currentLine);
                 }
             }
 
             currentLine = [];
         });
+
+        function regenerateCanvases() {
+            // Regenerate terrain
+            drawTerrainOnly();
+
+            // Redraw all remaining lines
+            drawnLines.forEach(line => {
+                drawLine(line);
+            });
+
+            // Re-apply all explosion holes
+            explosionHoles.forEach(hole => {
+                applyExplosionHole(hole.x, hole.y, hole.explosionPoints);
+            });
+        }
+
+        function applyExplosionHole(x, y, explosionPoints) {
+            if (explosionPoints.length < 3) return;
+
+            // Clear from collision canvas
+            collisionCtx.save();
+            collisionCtx.globalCompositeOperation = 'destination-out';
+            collisionCtx.fillStyle = 'rgba(0, 0, 0, 1)';
+            collisionCtx.beginPath();
+            collisionCtx.moveTo(explosionPoints[0].x, explosionPoints[0].y);
+
+            for (let i = 1; i < explosionPoints.length; i++) {
+                const current = explosionPoints[i];
+                const next = explosionPoints[(i + 1) % explosionPoints.length];
+                const cpX = current.x + (next.x - current.x) * 0.5;
+                const cpY = current.y + (next.y - current.y) * 0.5;
+                collisionCtx.quadraticCurveTo(current.x, current.y, cpX, cpY);
+            }
+
+            collisionCtx.quadraticCurveTo(
+                explosionPoints[explosionPoints.length - 1].x,
+                explosionPoints[explosionPoints.length - 1].y,
+                explosionPoints[0].x,
+                explosionPoints[0].y
+            );
+            collisionCtx.fill();
+            collisionCtx.restore();
+        }
 
         function getLineLength(line) {
             if (line.length < 2) return 0;
@@ -727,93 +768,10 @@
             return null;
         }
 
-        function createShapeExplosion(x, y, line1, line2, totalLineLength) {
-            // Apply explosion to terrain canvas so it persists
-            terrainCtx.save();
-            terrainCtx.globalCompositeOperation = 'destination-out';
-            terrainCtx.fillStyle = 'rgba(0, 0, 0, 1)';
-
-            const lengthFactor = 0.08;
-            const finalRadius = Math.max(30, totalLineLength * lengthFactor);
-
-            const numPoints = 12 + Math.floor(Math.random() * 8);
-            const explosionPoints = [];
-
-            for (let i = 0; i < numPoints; i++) {
-                const angle = (i / numPoints) * Math.PI * 2;
-                const radiusVariation = 0.6 + Math.random() * 0.8;
-                const radius = finalRadius * radiusVariation;
-
-                const angleNoise = (Math.random() - 0.5) * 0.3;
-                const finalAngle = angle + angleNoise;
-
-                explosionPoints.push({
-                    x: x + Math.cos(finalAngle) * radius,
-                    y: y + Math.sin(finalAngle) * radius
-                });
-            }
-
-            if (explosionPoints.length >= 3) {
-                terrainCtx.beginPath();
-                terrainCtx.moveTo(explosionPoints[0].x, explosionPoints[0].y);
-
-                for (let i = 1; i < explosionPoints.length; i++) {
-                    const current = explosionPoints[i];
-                    const next = explosionPoints[(i + 1) % explosionPoints.length];
-
-                    const cpX = current.x + (next.x - current.x) * 0.5;
-                    const cpY = current.y + (next.y - current.y) * 0.5;
-
-                    terrainCtx.quadraticCurveTo(current.x, current.y, cpX, cpY);
-                }
-
-                terrainCtx.quadraticCurveTo(
-                    explosionPoints[explosionPoints.length - 1].x,
-                    explosionPoints[explosionPoints.length - 1].y,
-                    explosionPoints[0].x,
-                    explosionPoints[0].y
-                );
-
-                terrainCtx.fill();
-            }
-
-            terrainCtx.restore();
-
-            // Visual explosion effect on main canvas (temporary)
-            ctx.save();
-            ctx.strokeStyle = '#FF4500';
-            ctx.lineWidth = 3;
-            ctx.globalAlpha = 0.8;
-
-            // Draw organic explosion outline
-            ctx.beginPath();
-            ctx.moveTo(explosionPoints[0].x, explosionPoints[0].y);
-
-            for (let i = 1; i < explosionPoints.length; i++) {
-                const current = explosionPoints[i];
-                const next = explosionPoints[(i + 1) % explosionPoints.length];
-
-                const cpX = current.x + (next.x - current.x) * 0.5;
-                const cpY = current.y + (next.y - current.y) * 0.5;
-
-                ctx.quadraticCurveTo(current.x, current.y, cpX, cpY);
-            }
-
-            ctx.quadraticCurveTo(
-                explosionPoints[explosionPoints.length - 1].x,
-                explosionPoints[explosionPoints.length - 1].y,
-                explosionPoints[0].x,
-                explosionPoints[0].y
-            );
-
-            ctx.stroke();
-            ctx.restore();
-        }
-
         function spawnLemming() {
             if (entrance && lemmingsSpawned < maxLemmings) {
                 // Spawn penguin near the entrance - fixed position
-                const lemming = new Lemming(entrance.x - 15, entrance.y + 10);
+                const lemming = new Lemming(entrance.x - 10, entrance.y + 10);
                 lemmings.push(lemming);
                 lemmingsSpawned++;
 
@@ -825,7 +783,7 @@
             // Redraw static terrain (this clears canvas and draws terrain + spawn points)
             drawStaticTerrain();
 
-            // Draw current line being drawn - thicker lines
+            // Draw current line being drawn
             if (isDrawing && currentLine.length > 1) {
                 ctx.save();
                 ctx.strokeStyle = '#00FF00';
@@ -841,27 +799,6 @@
                 ctx.stroke();
                 ctx.restore();
             }
-
-            // Draw completed lines - thicker lines WITHOUT anti-aliasing
-            drawnLines.forEach(line => {
-                if (line.length < 2) return;
-
-                ctx.save();
-                ctx.strokeStyle = '#0066FF';
-                ctx.lineWidth = 12;
-                ctx.lineCap = 'square';    // Sharp edges instead of round
-                ctx.lineJoin = 'miter';    // Sharp joins
-                ctx.globalAlpha = 1.0;     // Full opacity
-                ctx.imageSmoothingEnabled = false;  // Disable anti-aliasing
-
-                ctx.beginPath();
-                ctx.moveTo(line[0].x, line[0].y);
-                for (let i = 1; i < line.length; i++) {
-                    ctx.lineTo(line[i].x, line[i].y);
-                }
-                ctx.stroke();
-                ctx.restore();
-            });
 
             // Draw lemmings
             lemmings.forEach(lemming => lemming.draw());
@@ -951,11 +888,6 @@
 
             // Check if time is up
             const remainingTime = levelTime - accumulatedTime;
-
-            // DEBUG: Log timer info every few seconds
-            if (Math.floor(currentTime / 1000) % 5 === 0 && Math.random() < 0.1) {
-                console.log(`Time remaining: ${Math.round(remainingTime / 1000)}s, Saved: ${lemmingsSaved}, Spawned: ${lemmingsSpawned}/${maxLemmings}, Active: ${lemmings.filter(l => l.alive).length}, Speed: ${gameSpeed}x`);
-            }
 
             if (remainingTime <= 0) {
                 console.log(`TIMER EXPIRED - Saved: ${lemmingsSaved}`);
