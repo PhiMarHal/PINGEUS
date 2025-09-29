@@ -120,8 +120,8 @@
                 this.y = y;
                 this.vx = 0.125;
                 this.vy = 0;
-                this.width = 20;
-                this.height = 30;
+                this.width = 25;
+                this.height = 38;
                 this.alive = true;
                 this.lastAction = "spawned";
                 this.justSteppedUp = false; // Prevent jittering after step-up
@@ -166,7 +166,12 @@
                 // Screen boundaries
                 if (this.x <= 0 || this.x >= canvas.width - this.width) {
                     this.vx = -this.vx;
-                    this.x = Math.max(0, Math.min(canvas.width - this.width, this.x));
+                    // Move penguin slightly away from boundary to prevent re-triggering
+                    if (this.x <= 0) {
+                        this.x = 1; // Move 1 pixel away from left edge
+                    } else {
+                        this.x = canvas.width - this.width - 1; // Move 1 pixel away from right edge
+                    }
                     this.lastAction = "hit boundary";
                 }
 
@@ -196,7 +201,7 @@
                 const wallCheckX = direction > 0 ? newX + this.width : newX;
                 if (isSolidPixel(wallCheckX, bodyY)) {
                     // Hit a wall - but can we step up 16px?
-                    const stepHeight = 16;
+                    const stepHeight = 32;
                     const stepUpY = feetY - stepHeight;
 
                     // Check if there's clear space 16px above ground level ahead
@@ -418,11 +423,11 @@
             if (surfacePoints.length >= 2) {
                 surfacePoints.sort((a, b) => a.y - b.y);
 
-                const upperSurfaces = surfacePoints.filter(p => p.y < canvas.height * 0.6);
+                // Pick entrance in the surface
+                const upperSurfaces = surfacePoints.filter(p => p.y < canvas.height * 0.5);
                 const entranceSurface = upperSurfaces.length > 0 ?
                     upperSurfaces[Math.floor(Math.random() * Math.min(3, upperSurfaces.length))] :
                     surfacePoints[0];
-
                 entrance = { x: entranceSurface.x, y: entranceSurface.y - 60 };
 
                 let validExits = surfacePoints.filter(p =>
@@ -859,6 +864,11 @@
             lemmingsSaved = 0;
             maxLemmings = penguinsForNextLevel; // Only spawn as many as were saved
             accumulatedTime = 0; // Reset timer properly
+            lastFrameTime = 0; // Reset frame timing to ensure clean start
+
+            // Reset speed button to normal when advancing levels
+            speedButton.pressed = false;
+            gameSpeed = 1;
 
             // Generate new terrain
             generateTerrain();
