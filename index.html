@@ -64,6 +64,7 @@
 
         let mana = 1000;
         let lastLevelBonus = 1000;
+        let score = 0; // Persistent score across levels
 
         let levelTime = 240000;
         let gameStartTime = 0;
@@ -83,15 +84,16 @@
 
         let currentSpell = 'blue';
         let spellButtons = [
-            { spell: 'blue', x: 120, y: canvas.height - 50, radius: 35, color: '#0066FF', name: 'Ramp' },
-            { spell: 'red', x: 220, y: canvas.height - 50, radius: 35, color: '#FF4444', name: 'Bomb' },
-            { spell: 'purple', x: 320, y: canvas.height - 50, radius: 35, color: '#AA44FF', name: 'Wall' }
+            { spell: 'blue', x: 80, y: canvas.height - 50, radius: 35, color: '#0066FF', name: 'Ramp' },
+            { spell: 'red', x: 180, y: canvas.height - 50, radius: 35, color: '#FF4444', name: 'Bomb' },
+            { spell: 'purple', x: 280, y: canvas.height - 50, radius: 35, color: '#AA44FF', name: 'Wall' }
         ];
 
         let isDrawing = false;
         let currentLine = [];
         let drawnLines = [];
         let bobbingPenguins = [];
+        let particles = []; // Particle system for "no mana" effect
 
         function isSolidPixel(x, y) {
             x = Math.floor(x);
@@ -229,7 +231,8 @@
                 if (exit && this.distance(this.x + this.width / 2, this.y + this.height / 2, exit.x, exit.y) < 60) {
                     this.alive = false;
                     lemmingsSaved++;
-                    console.log(`Penguin saved! Total: ${lemmingsSaved}/${lemmingsSpawned}`);
+                    score++; // Add to persistent score
+                    console.log(`Penguin saved! Total: ${lemmingsSaved}/${lemmingsSpawned}, Score: ${score}`);
                     return;
                 }
             }
@@ -600,7 +603,47 @@
                 const dy = line[i].y - line[i - 1].y;
                 totalLength += Math.sqrt(dx * dx + dy * dy);
             }
-            return Math.round(totalLength);
+            return Math.round(totalLength * 0.5); // 0.5 mana per pixel
+        }
+
+        function createNoManaParticles(x, y) {
+            // Create 10-15 particles at the tap location
+            const numParticles = 10 + Math.floor(Math.random() * 6);
+            for (let i = 0; i < numParticles; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 2 + Math.random() * 3;
+                particles.push({
+                    x: x,
+                    y: y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed - 2, // Slight upward bias
+                    life: 1.0, // Opacity from 1 to 0
+                    decay: 0.02 + Math.random() * 0.02
+                });
+            }
+        }
+
+        function updateParticles() {
+            particles.forEach(p => {
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vy += 0.2; // Gravity
+                p.life -= p.decay;
+            });
+            // Remove dead particles
+            particles = particles.filter(p => p.life > 0);
+        }
+
+        function drawParticles() {
+            particles.forEach(p => {
+                ctx.save();
+                ctx.globalAlpha = p.life;
+                ctx.fillStyle = '#FF4444';
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            });
         }
 
         function getMousePos(event) {
@@ -770,6 +813,15 @@
                 }
             }
 
+            // Check minimum mana requirements for each spell
+            const minMana = currentSpell === 'red' ? 100 : currentSpell === 'purple' ? 40 : 10; // Blue needs at least 10 for a small line
+
+            if (mana < minMana) {
+                createNoManaParticles(pos.x, pos.y);
+                console.log(`Not enough mana! Need at least ${minMana}, have ${mana}`);
+                return;
+            }
+
             if (currentSpell === 'red') {
                 createExplosion(pos.x, pos.y);
                 return;
@@ -833,6 +885,15 @@
                     console.log(`Selected ${button.name} spell`);
                     return;
                 }
+            }
+
+            // Check minimum mana requirements for each spell
+            const minMana = currentSpell === 'red' ? 100 : currentSpell === 'purple' ? 40 : 10;
+
+            if (mana < minMana) {
+                createNoManaParticles(pos.x, pos.y);
+                console.log(`Not enough mana! Need at least ${minMana}, have ${mana}`);
+                return;
             }
 
             if (currentSpell === 'red') {
@@ -913,6 +974,7 @@
             }
 
             lemmings.forEach(lemming => lemming.draw());
+            drawParticles(); // Draw particle effects
 
             drawUI();
             drawSpeedButton();
@@ -921,8 +983,18 @@
 
         function drawUI() {
             ctx.save();
-            ctx.fillStyle = '#FFFFFF';
+
+            // Score at top center (biggest font)
+            ctx.fillStyle = '#FFD700';
             ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 3;
+            ctx.font = 'bold 48px Arial';
+            ctx.textAlign = 'center';
+            ctx.strokeText(`Score: ${score}`, canvas.width / 2, 50);
+            ctx.fillText(`Score: ${score}`, canvas.width / 2, 50);
+
+            // Timer in top right
+            ctx.fillStyle = '#FFFFFF';
             ctx.lineWidth = 2;
             ctx.font = 'bold 36px Arial';
             ctx.textAlign = 'right';
@@ -932,30 +1004,36 @@
             const seconds = Math.floor((remainingTime % 60000) / 1000);
             const timeText = `${minutes}:${seconds.toString().padStart(2, '0')}`;
 
-            ctx.strokeText(timeText, canvas.width - 20, 40);
-            ctx.fillText(timeText, canvas.width - 20, 40);
+            ctx.strokeText(timeText, canvas.width - 20, 50);
+            ctx.fillText(timeText, canvas.width - 20, 50);
 
+            // Level and penguin count (top left)
             ctx.textAlign = 'left';
             ctx.font = 'bold 30px Arial';
             const levelText = `Level ${currentLevel}`;
             const penguinText = `Penguins: ${lemmingsSaved}/${lemmingsSpawned}`;
-            const manaText = `Mana: ${mana}`;
 
-            ctx.strokeText(levelText, 20, 40);
-            ctx.fillText(levelText, 20, 40);
+            ctx.strokeText(levelText, 20, 50);
+            ctx.fillText(levelText, 20, 50);
 
-            ctx.strokeText(penguinText, 20, 80);
-            ctx.fillText(penguinText, 20, 80);
+            ctx.strokeText(penguinText, 20, 90);
+            ctx.fillText(penguinText, 20, 90);
 
+            // Mana at bottom center
             ctx.fillStyle = '#00BFFF';
-            ctx.strokeText(manaText, 20, 120);
-            ctx.fillText(manaText, 20, 120);
+            ctx.font = 'bold 32px Arial';
+            ctx.textAlign = 'center';
+            const manaText = `Mana: ${mana}`;
+            ctx.strokeText(manaText, canvas.width / 2, canvas.height - 20);
+            ctx.fillText(manaText, canvas.width / 2, canvas.height - 20);
 
+            // Speed indicator (top left, below penguin count)
             if (gameSpeed > 1) {
+                ctx.textAlign = 'left';
                 ctx.font = 'bold 24px Arial';
                 ctx.fillStyle = '#FFD700';
-                ctx.strokeText(`Speed: ${gameSpeed}x`, 20, 160);
-                ctx.fillText(`Speed: ${gameSpeed}x`, 20, 160);
+                ctx.strokeText(`Speed: ${gameSpeed}x`, 20, 130);
+                ctx.fillText(`Speed: ${gameSpeed}x`, 20, 130);
             }
 
             ctx.restore();
@@ -1052,6 +1130,7 @@
             const updatesPerFrame = gameSpeed;
             for (let i = 0; i < updatesPerFrame; i++) {
                 lemmings.forEach(lemming => lemming.update());
+                updateParticles(); // Update particle effects
             }
 
             lemmings = lemmings.filter(lemming => lemming.alive);
