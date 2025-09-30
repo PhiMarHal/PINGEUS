@@ -40,7 +40,6 @@
         const canvas = document.getElementById('terrainCanvas');
         const ctx = canvas.getContext('2d');
 
-        // ===== DUAL CANVAS SYSTEM =====
         const collisionCanvas = document.createElement('canvas');
         collisionCanvas.width = canvas.width;
         collisionCanvas.height = canvas.height;
@@ -63,6 +62,9 @@
         let lemmingsSpawned = 0;
         let lemmingsSaved = 0;
 
+        let mana = 1000;
+        let lastLevelBonus = 1000;
+
         let levelTime = 240000;
         let gameStartTime = 0;
         let currentLevel = 1;
@@ -71,28 +73,26 @@
 
         let gameSpeed = 1;
         let speedButton = {
-            x: canvas.width - 125,
-            y: canvas.height - 120,
+            x: canvas.width - 140,
+            y: canvas.height - 80,
             width: 90,
             height: 60,
             pressed: false,
             animationFrame: 0
         };
 
-        // ===== SPELL SYSTEM =====
-        let currentSpell = 'blue'; // 'blue', 'red', 'purple'
+        let currentSpell = 'blue';
         let spellButtons = [
-            { spell: 'blue', x: 80, y: canvas.height - 260, radius: 40, color: '#0066FF', name: 'Ramp' },
-            { spell: 'red', x: 80, y: canvas.height - 170, radius: 40, color: '#FF4444', name: 'Bomb' },
-            { spell: 'purple', x: 80, y: canvas.height - 80, radius: 40, color: '#AA44FF', name: 'Wall' }
+            { spell: 'blue', x: 120, y: canvas.height - 50, radius: 35, color: '#0066FF', name: 'Ramp' },
+            { spell: 'red', x: 220, y: canvas.height - 50, radius: 35, color: '#FF4444', name: 'Bomb' },
+            { spell: 'purple', x: 320, y: canvas.height - 50, radius: 35, color: '#AA44FF', name: 'Wall' }
         ];
 
         let isDrawing = false;
         let currentLine = [];
         let drawnLines = [];
-        let bobbingPenguins = []; // Track penguins that are swimming at the bottom
+        let bobbingPenguins = [];
 
-        // ===== COLLISION DETECTION =====
         function isSolidPixel(x, y) {
             x = Math.floor(x);
             y = Math.floor(y);
@@ -117,7 +117,6 @@
             const imageData = collisionCtx.getImageData(x, y, 1, 1);
             const data = imageData.data;
 
-            // Check if this is a blue ramp (0, 102, 255)
             return Math.abs(data[0] - 0) <= 10 &&
                 Math.abs(data[1] - 102) <= 10 &&
                 Math.abs(data[2] - 255) <= 10 &&
@@ -135,7 +134,6 @@
             const imageData = collisionCtx.getImageData(x, y, 1, 1);
             const data = imageData.data;
 
-            // Check if this is a purple wall (170, 68, 255)
             return Math.abs(data[0] - 170) <= 10 &&
                 Math.abs(data[1] - 68) <= 10 &&
                 Math.abs(data[2] - 255) <= 10 &&
@@ -144,11 +142,10 @@
 
         function isSolidIgnoringBlueRamps(x, y) {
             if (!isSolidPixel(x, y)) return false;
-            if (isBlueRamp(x, y)) return false; // Blue ramps passable from below/sides
-            return true; // Everything else (terrain, purple walls) is solid
+            if (isBlueRamp(x, y)) return false;
+            return true;
         }
 
-        // ===== PENGUIN CLASS =====
         class Lemming {
             constructor(x, y) {
                 this.x = x;
@@ -161,7 +158,7 @@
                 this.lastAction = "spawned";
                 this.justSteppedUp = false;
                 this.swimming = false;
-                this.bobPhase = Math.random() * Math.PI * 2; // Random starting phase for bobbing
+                this.bobPhase = Math.random() * Math.PI * 2;
             }
 
             update() {
@@ -171,29 +168,23 @@
                 const groundCheckX = this.x + this.width / 2 + (direction * this.width / 4);
                 const feetY = this.y + this.height;
 
-                // Check if at bottom of screen
                 if (feetY >= canvas.height) {
-                    // Start swimming if not already
                     if (!this.swimming) {
                         this.swimming = true;
-                        this.y = canvas.height - this.height + 10; // Slightly below surface
+                        this.y = canvas.height - this.height + 10;
                     }
                 }
 
                 if (this.swimming) {
-                    // Swimming mode - bob up and down
                     this.bobPhase += 0.1;
                     const bobOffset = Math.sin(this.bobPhase) * 5;
                     this.y = canvas.height - this.height + 10 + bobOffset;
 
-                    // Keep walking horizontally
                     this.x += this.vx;
 
-                    // Check if we've reached solid ground to climb back up
                     if (isSolidPixel(groundCheckX, feetY - 20)) {
                         this.swimming = false;
                         this.vy = 0;
-                        // Try to get back on land
                         for (let checkY = feetY - 30; checkY <= feetY; checkY++) {
                             if (isSolidPixel(groundCheckX, checkY)) {
                                 this.y = checkY - this.height;
@@ -204,13 +195,11 @@
 
                     this.lastAction = "swimming";
                 } else if (!isSolidPixel(groundCheckX, feetY + 1)) {
-                    // Falling
                     this.vy += 0.5;
                     this.y += this.vy;
                     this.lastAction = "falling";
                     this.justSteppedUp = false;
                 } else {
-                    // On ground - normal behavior
                     this.vy = 0;
 
                     if (!this.justSteppedUp) {
@@ -227,7 +216,6 @@
                     this.attemptMovement();
                 }
 
-                // Screen boundaries
                 if (this.x <= 0 || this.x >= canvas.width - this.width) {
                     this.vx = -this.vx;
                     if (this.x <= 0) {
@@ -238,7 +226,6 @@
                     this.lastAction = "hit boundary";
                 }
 
-                // Check if reached exit
                 if (exit && this.distance(this.x + this.width / 2, this.y + this.height / 2, exit.x, exit.y) < 60) {
                     this.alive = false;
                     lemmingsSaved++;
@@ -256,29 +243,23 @@
 
                 const wallCheckX = direction > 0 ? newX + this.width : newX;
 
-                // Check for solid obstacle at body level (includes terrain and purple walls, NOT blue ramps)
                 if (isSolidIgnoringBlueRamps(wallCheckX, bodyY)) {
-                    // Hit a wall - try to step up 16px
                     const stepHeight = 16;
                     const stepUpY = feetY - stepHeight;
 
-                    // Check if there's clear space 16px above (ignoring blue ramps for ceiling)
                     if (!isSolidIgnoringBlueRamps(wallCheckX, stepUpY) && !isSolidIgnoringBlueRamps(wallCheckX, stepUpY - this.height)) {
-                        // Clear space - step up
                         this.x = newX;
                         this.y -= stepHeight;
                         this.justSteppedUp = true;
                         this.lastAction = "stepped up 16px";
                         return;
                     } else {
-                        // Can't step up - turn around
                         this.vx = -this.vx;
                         this.lastAction = "hit wall - turning";
                         return;
                     }
                 }
 
-                // No wall - move forward
                 this.x = newX;
                 this.lastAction = "walking";
             }
@@ -327,11 +308,16 @@
             generatePoints();
             terrainShapes = [];
 
+            const bottomSafeZone = canvas.height * 0.98; // No terrain in bottom 2%
+
             for (let i = 0; i < points.length; i++) {
                 if (!points[i].isTerrain) continue;
 
                 const centerX = points[i].x;
                 const centerY = points[i].y;
+
+                // Skip if terrain would be in bottom 2%
+                if (centerY > bottomSafeZone - 100) continue;
 
                 const platformType = Math.random();
                 let blobPoints = [];
@@ -352,7 +338,10 @@
                         const x = centerX + Math.cos(localAngle + angle) * localRadius;
                         const y = centerY + Math.sin(localAngle + angle) * localRadius;
 
-                        blobPoints.push({ x, y });
+                        // Clamp y to stay above safe zone
+                        if (y < bottomSafeZone) {
+                            blobPoints.push({ x, y });
+                        }
                     }
                 } else {
                     const radius = 80 + Math.random() * 60;
@@ -364,7 +353,10 @@
                         const x = centerX + Math.cos(angle) * r;
                         const y = centerY + Math.sin(angle) * r;
 
-                        blobPoints.push({ x, y });
+                        // Clamp y to stay above safe zone
+                        if (y < bottomSafeZone) {
+                            blobPoints.push({ x, y });
+                        }
                     }
                 }
 
@@ -436,9 +428,7 @@
         function drawStaticTerrain() {
             ctx.fillStyle = '#87CEEB';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
-
             ctx.drawImage(collisionCanvas, 0, 0);
-
             drawSpawnPoints();
         }
 
@@ -450,13 +440,13 @@
         function findSpawnPoints() {
             const surfacePoints = [];
             const scanStep = 30;
+            const bottomSafeZone = canvas.height * 0.98; // No spawns in bottom 2%
 
-            // Define button exclusion zones
-            const leftButtonZone = { minX: 0, maxX: 150, minY: canvas.height - 300 };
-            const rightButtonZone = { minX: canvas.width - 180, maxX: canvas.width, minY: canvas.height - 180 };
+            // Simple exclusion zone for bottom UI bar
+            const bottomUIZone = { minY: canvas.height - 110 };
 
             for (let x = 80; x < canvas.width - 80; x += scanStep) {
-                for (let y = 100; y < canvas.height - 100; y += scanStep) {
+                for (let y = 100; y < bottomSafeZone; y += scanStep) {
                     if (isTerrainAt(x, y)) {
                         const hasSpaceAbove = !isTerrainAt(x, y - 50) && !isTerrainAt(x, y - 35);
 
@@ -464,11 +454,10 @@
                             const leftOk = isTerrainAt(x - scanStep, y) || isTerrainAt(x - scanStep, y + 12);
                             const rightOk = isTerrainAt(x + scanStep, y) || isTerrainAt(x + scanStep, y + 12);
 
-                            // Check if point is NOT in button zones
-                            const notInLeftZone = !(x >= leftButtonZone.minX && x <= leftButtonZone.maxX && y >= leftButtonZone.minY);
-                            const notInRightZone = !(x >= rightButtonZone.minX && x <= rightButtonZone.maxX && y >= rightButtonZone.minY);
+                            // Don't spawn in bottom UI zone
+                            const notInBottomUI = y < bottomUIZone.minY;
 
-                            if (leftOk && rightOk && notInLeftZone && notInRightZone) {
+                            if (leftOk && rightOk && notInBottomUI) {
                                 surfacePoints.push({ x, y });
                             }
                         }
@@ -500,7 +489,7 @@
                 }
             } else {
                 const entranceY = 200 + Math.random() * 200;
-                const exitY = canvas.height - 300 + Math.random() * 150;
+                const exitY = Math.min(bottomSafeZone - 150, canvas.height - 400) + Math.random() * 150;
 
                 entrance = { x: 160, y: entranceY - 50 };
                 exit = { x: canvas.width - 160, y: exitY - 50 };
@@ -578,13 +567,11 @@
             spellButtons.forEach(button => {
                 ctx.save();
 
-                // Circle background - filled with spell color
                 ctx.fillStyle = button.color;
                 ctx.beginPath();
                 ctx.arc(button.x, button.y, button.radius, 0, 2 * Math.PI);
                 ctx.fill();
 
-                // Border - gold if selected, white otherwise
                 ctx.strokeStyle = currentSpell === button.spell ? '#FFD700' : '#fff';
                 ctx.lineWidth = currentSpell === button.spell ? 4 : 2;
                 ctx.stroke();
@@ -602,6 +589,18 @@
             const dx = x - button.x;
             const dy = y - button.y;
             return Math.sqrt(dx * dx + dy * dy) <= button.radius;
+        }
+
+        function getLinePixelLength(line) {
+            if (line.length < 2) return 0;
+
+            let totalLength = 0;
+            for (let i = 1; i < line.length; i++) {
+                const dx = line[i].x - line[i - 1].x;
+                const dy = line[i].y - line[i - 1].y;
+                totalLength += Math.sqrt(dx * dx + dy * dy);
+            }
+            return Math.round(totalLength);
         }
 
         function getMousePos(event) {
@@ -631,11 +630,9 @@
             if (line.length < 2) return line;
 
             if (spell === 'purple') {
-                // Purple walls: pure vertical - take average X and make all points vertical
                 const avgX = line.reduce((sum, p) => sum + p.x, 0) / line.length;
                 return line.map(p => ({ x: avgX, y: p.y }));
             } else if (spell === 'blue') {
-                // Blue ramps: max 45° from horizontal
                 const clampedLine = [line[0]];
 
                 for (let i = 1; i < line.length; i++) {
@@ -645,9 +642,7 @@
                     const dx = current.x - prev.x;
                     const dy = current.y - prev.y;
 
-                    // If slope is steeper than 45°, clamp it
                     if (Math.abs(dy) > Math.abs(dx)) {
-                        // Too steep - clamp to 45° by adjusting y
                         const newDy = Math.sign(dy) * Math.abs(dx);
                         clampedLine.push({ x: current.x, y: prev.y + newDy });
                     } else {
@@ -676,9 +671,38 @@
             collisionCtx.stroke();
         }
 
-        function createExplosion(x, y) {
-            const radius = 50; // Fixed explosion size
+        function placePurpleWall(x, y) {
+            const wallCost = 40;
 
+            if (mana < wallCost) {
+                console.log('Not enough mana for purple wall! Need 40, have ' + mana);
+                return;
+            }
+
+            const wallHeight = 64;
+            const halfHeight = wallHeight / 2;
+            const wallLine = [
+                { x: x, y: y + halfHeight },
+                { x: x, y: y - halfHeight }
+            ];
+
+            const color = 'rgba(170, 68, 255, 255)';
+            drawnLines.push({ line: wallLine, color: color });
+            drawLine(wallLine, color);
+
+            mana -= wallCost;
+            console.log(`Placed purple wall, -${wallCost} mana (${mana} remaining)`);
+        }
+
+        function createExplosion(x, y) {
+            const explosionCost = 100;
+
+            if (mana < explosionCost) {
+                console.log('Not enough mana for explosion! Need 100, have ' + mana);
+                return;
+            }
+
+            const radius = 50;
             const numPoints = 12 + Math.floor(Math.random() * 8);
             const explosionPoints = [];
 
@@ -696,6 +720,9 @@
             }
 
             applyExplosionHole(x, y, explosionPoints);
+
+            mana -= explosionCost;
+            console.log(`Created explosion, -${explosionCost} mana (${mana} remaining)`);
         }
 
         function applyExplosionHole(x, y, explosionPoints) {
@@ -725,25 +752,9 @@
             collisionCtx.restore();
         }
 
-        function placePurpleWall(x, y) {
-            // Create a 64px tall vertical wall centered at the click position
-            const wallHeight = 64;
-            const halfHeight = wallHeight / 2;
-            const wallLine = [
-                { x: x, y: y + halfHeight },
-                { x: x, y: y - halfHeight }
-            ];
-
-            const color = 'rgba(170, 68, 255, 255)';
-            drawnLines.push({ line: wallLine, color: color });
-            drawLine(wallLine, color);
-            console.log(`Placed purple wall at (${Math.round(x)}, ${Math.round(y)})`);
-        }
-
         canvas.addEventListener('mousedown', function (event) {
             const pos = getMousePos(event);
 
-            // Check speed button
             if (isPointInButton(pos.x, pos.y, speedButton)) {
                 speedButton.pressed = !speedButton.pressed;
                 gameSpeed = speedButton.pressed ? 8 : 1;
@@ -751,7 +762,6 @@
                 return;
             }
 
-            // Check spell buttons
             for (let button of spellButtons) {
                 if (isPointInCircleButton(pos.x, pos.y, button)) {
                     currentSpell = button.spell;
@@ -760,20 +770,16 @@
                 }
             }
 
-            // Red spell = instant explosion
             if (currentSpell === 'red') {
                 createExplosion(pos.x, pos.y);
-                console.log(`Created explosion at (${Math.round(pos.x)}, ${Math.round(pos.y)})`);
                 return;
             }
 
-            // Purple spell = instant wall
             if (currentSpell === 'purple') {
                 placePurpleWall(pos.x, pos.y);
                 return;
             }
 
-            // Blue spell = draw line
             isDrawing = true;
             currentLine = [pos];
         });
@@ -789,14 +795,22 @@
             if (!isDrawing) return;
             isDrawing = false;
 
-            // Only blue spell uses line drawing
             if (currentLine.length > 1 && currentSpell === 'blue') {
-                // Clamp line based on spell type
                 const clampedLine = clampLine(currentLine, currentSpell);
+                const lineCost = getLinePixelLength(clampedLine);
+
+                if (mana < lineCost) {
+                    console.log(`Not enough mana for blue line! Need ${lineCost}, have ${mana}`);
+                    currentLine = [];
+                    return;
+                }
+
                 const color = 'rgba(0, 102, 255, 255)';
                 drawnLines.push({ line: [...clampedLine], color: color });
                 drawLine(clampedLine, color);
-                console.log(`Drew ${currentSpell} line with ${clampedLine.length} points`);
+
+                mana -= lineCost;
+                console.log(`Drew blue line, -${lineCost} mana (${mana} remaining)`);
             }
 
             currentLine = [];
@@ -806,7 +820,6 @@
             event.preventDefault();
             const pos = getTouchPos(event);
 
-            // Check speed button
             if (isPointInButton(pos.x, pos.y, speedButton)) {
                 speedButton.pressed = !speedButton.pressed;
                 gameSpeed = speedButton.pressed ? 8 : 1;
@@ -814,7 +827,6 @@
                 return;
             }
 
-            // Check spell buttons
             for (let button of spellButtons) {
                 if (isPointInCircleButton(pos.x, pos.y, button)) {
                     currentSpell = button.spell;
@@ -823,20 +835,16 @@
                 }
             }
 
-            // Red spell = instant explosion
             if (currentSpell === 'red') {
                 createExplosion(pos.x, pos.y);
-                console.log(`Created explosion at (${Math.round(pos.x)}, ${Math.round(pos.y)})`);
                 return;
             }
 
-            // Purple spell = instant wall
             if (currentSpell === 'purple') {
                 placePurpleWall(pos.x, pos.y);
                 return;
             }
 
-            // Blue spell = draw line
             isDrawing = true;
             currentLine = [pos];
         }, { passive: false });
@@ -854,14 +862,22 @@
             if (!isDrawing) return;
             isDrawing = false;
 
-            // Only blue spell uses line drawing
             if (currentLine.length > 1 && currentSpell === 'blue') {
-                // Clamp line based on spell type
                 const clampedLine = clampLine(currentLine, currentSpell);
+                const lineCost = getLinePixelLength(clampedLine);
+
+                if (mana < lineCost) {
+                    console.log(`Not enough mana for blue line! Need ${lineCost}, have ${mana}`);
+                    currentLine = [];
+                    return;
+                }
+
                 const color = 'rgba(0, 102, 255, 255)';
                 drawnLines.push({ line: [...clampedLine], color: color });
                 drawLine(clampedLine, color);
-                console.log(`Drew ${currentSpell} line with ${clampedLine.length} points`);
+
+                mana -= lineCost;
+                console.log(`Drew blue line, -${lineCost} mana (${mana} remaining)`);
             }
 
             currentLine = [];
@@ -880,7 +896,6 @@
         function drawGame() {
             drawStaticTerrain();
 
-            // Draw current line being drawn (only for blue spell)
             if (isDrawing && currentLine.length > 1 && currentSpell === 'blue') {
                 ctx.save();
                 ctx.strokeStyle = '#00FF00';
@@ -924,6 +939,7 @@
             ctx.font = 'bold 30px Arial';
             const levelText = `Level ${currentLevel}`;
             const penguinText = `Penguins: ${lemmingsSaved}/${lemmingsSpawned}`;
+            const manaText = `Mana: ${mana}`;
 
             ctx.strokeText(levelText, 20, 40);
             ctx.fillText(levelText, 20, 40);
@@ -931,11 +947,15 @@
             ctx.strokeText(penguinText, 20, 80);
             ctx.fillText(penguinText, 20, 80);
 
+            ctx.fillStyle = '#00BFFF';
+            ctx.strokeText(manaText, 20, 120);
+            ctx.fillText(manaText, 20, 120);
+
             if (gameSpeed > 1) {
                 ctx.font = 'bold 24px Arial';
                 ctx.fillStyle = '#FFD700';
-                ctx.strokeText(`Speed: ${gameSpeed}x`, 20, 120);
-                ctx.fillText(`Speed: ${gameSpeed}x`, 20, 120);
+                ctx.strokeText(`Speed: ${gameSpeed}x`, 20, 160);
+                ctx.fillText(`Speed: ${gameSpeed}x`, 20, 160);
             }
 
             ctx.restore();
@@ -945,7 +965,11 @@
             currentLevel++;
             const penguinsForNextLevel = lemmingsSaved;
 
-            console.log(`Level ${currentLevel}: Saved ${penguinsForNextLevel} penguins, advancing to next level`);
+            const manaBonus = Math.ceil(lastLevelBonus * 0.9);
+            mana += manaBonus;
+            lastLevelBonus = manaBonus;
+
+            console.log(`Level ${currentLevel}: Saved ${penguinsForNextLevel} penguins, +${manaBonus} mana (total: ${mana})`);
 
             lemmings = [];
             drawnLines = [];
@@ -957,7 +981,7 @@
 
             speedButton.pressed = false;
             gameSpeed = 1;
-            currentSpell = 'blue'; // Reset to default spell
+            currentSpell = 'blue';
 
             generateTerrain();
 
