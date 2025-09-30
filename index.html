@@ -650,18 +650,32 @@
             return Math.round(totalLength * 0.5);
         }
 
-        function createNoManaParticles(x, y) {
+        function createSpellParticles(x, y, spell) {
             const numParticles = 10 + Math.floor(Math.random() * 6);
+
+            // Define color palettes for each spell
+            let colors;
+            if (spell === 'blue') {
+                colors = ['#0066FF', '#0088FF', '#00AAFF', '#0044DD', '#3399FF'];
+            } else if (spell === 'red') {
+                colors = ['#FF4444', '#FF6666', '#FF2222', '#CC3333', '#FF5555'];
+            } else if (spell === 'purple') {
+                colors = ['#AA44FF', '#BB66FF', '#9933FF', '#8822DD', '#CC77FF'];
+            }
+
             for (let i = 0; i < numParticles; i++) {
                 const angle = Math.random() * Math.PI * 2;
-                const speed = 2 + Math.random() * 3;
+                const speed = 1 + Math.random() * 1.5;
+                const color = colors[Math.floor(Math.random() * colors.length)];
+
                 particles.push({
                     x: x,
                     y: y,
                     vx: Math.cos(angle) * speed,
-                    vy: Math.sin(angle) * speed - 2,
+                    vy: Math.sin(angle) * speed - 1,
                     life: 1.0,
-                    decay: 0.02 + Math.random() * 0.02
+                    decay: 0.01 + Math.random() * 0.01,
+                    color: color
                 });
             }
         }
@@ -680,7 +694,7 @@
             particles.forEach(p => {
                 ctx.save();
                 ctx.globalAlpha = p.life;
-                ctx.fillStyle = '#FF4444';
+                ctx.fillStyle = p.color;
                 ctx.beginPath();
                 ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
                 ctx.fill();
@@ -729,6 +743,8 @@
         function placePurpleWall(x, y) {
             const wallCost = 40;
 
+            createSpellParticles(x, y, 'purple');
+
             if (mana < wallCost) {
                 console.log('Not enough mana for purple wall! Need 40, have ' + mana);
                 return;
@@ -755,6 +771,8 @@
 
         function createExplosion(x, y) {
             const explosionCost = 100;
+
+            createSpellParticles(x, y, 'red');
 
             if (mana < explosionCost) {
                 console.log('Not enough mana for explosion! Need 100, have ' + mana);
@@ -836,7 +854,7 @@
             const minMana = currentSpell === 'red' ? 100 : currentSpell === 'purple' ? 40 : 10;
 
             if (mana < minMana) {
-                createNoManaParticles(pos.x, pos.y);
+                createSpellParticles(pos.x, pos.y, currentSpell);
                 console.log(`Not enough mana! Need at least ${minMana}, have ${mana}`);
                 return;
             }
@@ -869,6 +887,8 @@
 
             if (drawStart && drawCurrent && currentSpell === 'blue') {
                 const snappedLine = getSnappedLine(drawStart, drawCurrent);
+
+                createSpellParticles(drawStart.x, drawStart.y, 'blue');
 
                 if (snappedLine) {
                     const lineCost = getLinePixelLength(snappedLine);
@@ -919,7 +939,7 @@
             const minMana = currentSpell === 'red' ? 100 : currentSpell === 'purple' ? 40 : 10;
 
             if (mana < minMana) {
-                createNoManaParticles(pos.x, pos.y);
+                createSpellParticles(pos.x, pos.y, currentSpell);
                 console.log(`Not enough mana! Need at least ${minMana}, have ${mana}`);
                 return;
             }
@@ -954,6 +974,8 @@
 
             if (drawStart && drawCurrent && currentSpell === 'blue') {
                 const snappedLine = getSnappedLine(drawStart, drawCurrent);
+
+                createSpellParticles(drawStart.x, drawStart.y, 'blue');
 
                 if (snappedLine) {
                     const lineCost = getLinePixelLength(snappedLine);
