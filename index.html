@@ -71,10 +71,10 @@
 
         let gameSpeed = 1;
         let speedButton = {
-            x: canvas.width - 80,
-            y: canvas.height - 90,
-            width: 60,
-            height: 40,
+            x: canvas.width - 125,
+            y: canvas.height - 120,
+            width: 90,
+            height: 60,
             pressed: false,
             animationFrame: 0
         };
@@ -451,6 +451,10 @@
             const surfacePoints = [];
             const scanStep = 30;
 
+            // Define button exclusion zones
+            const leftButtonZone = { minX: 0, maxX: 150, minY: canvas.height - 300 };
+            const rightButtonZone = { minX: canvas.width - 180, maxX: canvas.width, minY: canvas.height - 180 };
+
             for (let x = 80; x < canvas.width - 80; x += scanStep) {
                 for (let y = 100; y < canvas.height - 100; y += scanStep) {
                     if (isTerrainAt(x, y)) {
@@ -460,7 +464,11 @@
                             const leftOk = isTerrainAt(x - scanStep, y) || isTerrainAt(x - scanStep, y + 12);
                             const rightOk = isTerrainAt(x + scanStep, y) || isTerrainAt(x + scanStep, y + 12);
 
-                            if (leftOk && rightOk) {
+                            // Check if point is NOT in button zones
+                            const notInLeftZone = !(x >= leftButtonZone.minX && x <= leftButtonZone.maxX && y >= leftButtonZone.minY);
+                            const notInRightZone = !(x >= rightButtonZone.minX && x <= rightButtonZone.maxX && y >= rightButtonZone.minY);
+
+                            if (leftOk && rightOk && notInLeftZone && notInRightZone) {
                                 surfacePoints.push({ x, y });
                             }
                         }
@@ -718,11 +726,12 @@
         }
 
         function placePurpleWall(x, y) {
-            // Create a 128px tall vertical wall at the click position
-            const wallHeight = 128;
+            // Create a 64px tall vertical wall centered at the click position
+            const wallHeight = 64;
+            const halfHeight = wallHeight / 2;
             const wallLine = [
-                { x: x, y: y },
-                { x: x, y: y - wallHeight }
+                { x: x, y: y + halfHeight },
+                { x: x, y: y - halfHeight }
             ];
 
             const color = 'rgba(170, 68, 255, 255)';
