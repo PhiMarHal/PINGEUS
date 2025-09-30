@@ -684,7 +684,7 @@
             particles.forEach(p => {
                 p.x += p.vx;
                 p.y += p.vy;
-                p.vy += 0.2;
+                p.vy += 0.1;
                 p.life -= p.decay;
             });
             particles = particles.filter(p => p.life > 0);
@@ -770,16 +770,16 @@
         }
 
         function createExplosion(x, y) {
-            const explosionCost = 100;
+            const explosionCost = 40;
 
             createSpellParticles(x, y, 'red');
 
             if (mana < explosionCost) {
-                console.log('Not enough mana for explosion! Need 100, have ' + mana);
+                console.log('Not enough mana for explosion! Need 40, have ' + mana);
                 return;
             }
 
-            const radius = 50;
+            const radius = 25;
             const numPoints = 12 + Math.floor(Math.random() * 8);
             const explosionPoints = [];
 
