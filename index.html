@@ -120,8 +120,8 @@
 
         function startShipSeaRocking() {
             // Rotational swaying motion (like rocking in waves)
-            const maxRotation = 8 * Math.PI / 180; // 8 degrees in radians
-            const swayDuration = 4000; // 4 seconds
+            const maxRotation = 4 * Math.PI / 180; // 4 degrees in radians
+            const swayDuration = 3000; // 3 seconds
 
             function updateRotation() {
                 if (gameState !== 'playing') {
@@ -137,8 +137,8 @@
             updateRotation();
 
             // Vertical bobbing motion
-            const bobDuration = 3000; // 3 seconds
-            const bobAmount = 5; // 5 pixels up/down
+            const bobDuration = 4000; // 4 seconds
+            const bobAmount = 2; // 2 pixels up/down
 
             function updateBob() {
                 if (gameState !== 'playing') {
@@ -218,19 +218,32 @@
             visible: false
         };
 
+        // Jumping pudgies for intermission screen
+        let jumpingPudgies = [];
+
         // Load sprites
         const sprites = {
             igloo: new Image(),
             ship: new Image(),
-            penguin: new Image()
+            penguin: new Image(),
+            pudgy_jump: new Image(),
+            pudgy_walk_1: new Image(),
+            pudgy_walk_2: new Image(),
+            pudgy_walk_3: new Image(),
+            pudgy_walk_4: new Image()
         };
 
         sprites.igloo.src = 'assets/igloo.png';
         sprites.ship.src = 'assets/ship.png';
         sprites.penguin.src = 'assets/penguin.png';
+        sprites.pudgy_jump.src = 'assets/pudgy_jump.png';
+        sprites.pudgy_walk_1.src = 'assets/pudgy_walk_1.png';
+        sprites.pudgy_walk_2.src = 'assets/pudgy_walk_2.png';
+        sprites.pudgy_walk_3.src = 'assets/pudgy_walk_3.png';
+        sprites.pudgy_walk_4.src = 'assets/pudgy_walk_4.png';
 
         let spritesLoaded = 0;
-        const totalSprites = 3;
+        const totalSprites = 8;
 
         function onSpriteLoad() {
             spritesLoaded++;
@@ -248,10 +261,20 @@
         sprites.igloo.onload = onSpriteLoad;
         sprites.ship.onload = onSpriteLoad;
         sprites.penguin.onload = onSpriteLoad;
+        sprites.pudgy_jump.onload = onSpriteLoad;
+        sprites.pudgy_walk_1.onload = onSpriteLoad;
+        sprites.pudgy_walk_2.onload = onSpriteLoad;
+        sprites.pudgy_walk_3.onload = onSpriteLoad;
+        sprites.pudgy_walk_4.onload = onSpriteLoad;
 
         sprites.igloo.onerror = () => console.error('Failed to load igloo.png');
         sprites.ship.onerror = () => console.error('Failed to load ship.png');
         sprites.penguin.onerror = () => console.error('Failed to load penguin.png');
+        sprites.pudgy_jump.onerror = () => console.error('Failed to load pudgy_jump.png');
+        sprites.pudgy_walk_1.onerror = () => console.error('Failed to load pudgy_walk_1.png');
+        sprites.pudgy_walk_2.onerror = () => console.error('Failed to load pudgy_walk_2.png');
+        sprites.pudgy_walk_3.onerror = () => console.error('Failed to load pudgy_walk_3.png');
+        sprites.pudgy_walk_4.onerror = () => console.error('Failed to load pudgy_walk_4.png');
 
         function isSolidPixel(x, y) {
             x = Math.floor(x);
@@ -319,6 +342,9 @@
                 this.justSteppedUp = false;
                 this.swimming = false;
                 this.bobPhase = Math.random() * Math.PI * 2;
+                this.animationFrame = 0;
+                this.animationCounter = 0;
+                this.animationSpeed = 12; // frames between animation updates
             }
 
             update() {
@@ -446,13 +472,33 @@
                 const offsetX = (spriteWidth - this.width) / 2;
                 const offsetY = (spriteHeight - this.height) / 2;
 
+                // Animation sequence: 1, 2, 3, 4, 3, 2 (repeating)
+                const animationSequence = [0, 1, 2, 3, 2, 1];
+                const currentFrame = animationSequence[this.animationFrame % animationSequence.length];
+
+                // Get the appropriate walk sprite
+                const walkSprites = [
+                    sprites.pudgy_walk_1,
+                    sprites.pudgy_walk_2,
+                    sprites.pudgy_walk_3,
+                    sprites.pudgy_walk_4
+                ];
+                const currentSprite = walkSprites[currentFrame];
+
+                // Update animation counter
+                this.animationCounter++;
+                if (this.animationCounter >= this.animationSpeed) {
+                    this.animationCounter = 0;
+                    this.animationFrame++;
+                }
+
                 // Flip horizontally if moving left
                 if (this.vx < 0) {
                     ctx.translate(this.x + this.width + offsetX, this.y - offsetY);
                     ctx.scale(-1, 1);
-                    ctx.drawImage(sprites.penguin, 0, 0, spriteWidth, spriteHeight);
+                    ctx.drawImage(currentSprite, 0, 0, spriteWidth, spriteHeight);
                 } else {
-                    ctx.drawImage(sprites.penguin, this.x - offsetX, this.y - offsetY, spriteWidth, spriteHeight);
+                    ctx.drawImage(currentSprite, this.x - offsetX, this.y - offsetY, spriteWidth, spriteHeight);
                 }
 
                 ctx.restore();
@@ -874,6 +920,72 @@
             }
         }
 
+        function createJumpingPudgies() {
+            jumpingPudgies = [];
+            const pudgyWidth = 540;
+            const pudgyHeight = 716;
+            const startTime = performance.now();
+
+            // Three pudgies at different horizontal positions with different delays
+            const positions = [
+                { x: canvas.width * 0.2, delay: 0 },
+                { x: canvas.width * 0.5, delay: 800 },
+                { x: canvas.width * 0.8, delay: 400 }
+            ];
+
+            positions.forEach(pos => {
+                jumpingPudgies.push({
+                    x: pos.x,
+                    y: canvas.height + pudgyHeight / 2,
+                    width: pudgyWidth,
+                    height: pudgyHeight,
+                    startY: canvas.height + pudgyHeight / 2,
+                    targetY: canvas.height / 2,
+                    jumpDuration: 2000, // 2 seconds for full jump cycle
+                    startTime: startTime + pos.delay,
+                    active: false
+                });
+            });
+        }
+
+        function updateJumpingPudgies() {
+            const now = performance.now();
+
+            jumpingPudgies.forEach(pudgy => {
+                if (!pudgy.active && now >= pudgy.startTime) {
+                    pudgy.active = true;
+                }
+
+                if (pudgy.active) {
+                    const elapsed = now - pudgy.startTime;
+                    const progress = (elapsed % pudgy.jumpDuration) / pudgy.jumpDuration;
+
+                    // Parabolic motion - goes up and comes back down
+                    // At progress 0: at startY (below screen)
+                    // At progress 0.5: at targetY (middle of screen)
+                    // At progress 1: back at startY (below screen)
+                    const heightDiff = pudgy.startY - pudgy.targetY;
+                    pudgy.y = pudgy.startY - heightDiff * (1 - Math.pow(2 * progress - 1, 2));
+                }
+            });
+        }
+
+        function drawJumpingPudgies() {
+            jumpingPudgies.forEach(pudgy => {
+                if (pudgy.active) {
+                    ctx.save();
+                    ctx.drawImage(
+                        sprites.pudgy_jump,
+                        pudgy.x - pudgy.width / 2,
+                        pudgy.y - pudgy.height / 2,
+                        pudgy.width,
+                        pudgy.height
+                    );
+                    ctx.restore();
+                }
+            });
+        }
+
         function updateParticles() {
             particles.forEach(p => {
                 p.x += p.vx;
@@ -1263,6 +1375,9 @@
             ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+            // Draw jumping pudgies behind everything else
+            drawJumpingPudgies();
+
             drawIntermissionParticles();
 
             ctx.fillStyle = '#FFD700';
@@ -1286,6 +1401,8 @@
 
             // Hint text with word wrapping
             ctx.fillStyle = '#FFFFFF';
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 3;
             ctx.font = '24px Arial';
             const maxWidth = canvas.width - 100;
             const lineHeight = 32;
@@ -1298,6 +1415,7 @@
                 const metrics = ctx.measureText(testLine);
 
                 if (metrics.width > maxWidth && i > 0) {
+                    ctx.strokeText(line, canvas.width / 2, y);
                     ctx.fillText(line, canvas.width / 2, y);
                     line = words[i] + ' ';
                     y += lineHeight;
@@ -1305,6 +1423,7 @@
                     line = testLine;
                 }
             }
+            ctx.strokeText(line, canvas.width / 2, y);
             ctx.fillText(line, canvas.width / 2, y);
 
             // Button
@@ -1319,7 +1438,7 @@
 
             ctx.fillStyle = '#FFFFFF';
             ctx.font = 'bold 36px Arial';
-            ctx.fillText(`ENTER LEVEL ${currentLevel}`, canvas.width / 2, intermissionButton.y + intermissionButton.height / 2 + 12);
+            ctx.fillText(`ENTER LEVEL ${currentLevel + 1}`, canvas.width / 2, intermissionButton.y + intermissionButton.height / 2 + 12);
         }
 
         function drawGameOverScreen() {
@@ -1386,7 +1505,8 @@
             ctx.restore();
 
             ctx.fillStyle = '#FFFFFF';
-            ctx.lineWidth = 2;
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 3;
             ctx.font = 'bold 36px Arial';
             ctx.textAlign = 'right';
 
@@ -1478,6 +1598,7 @@
             currentHint = gameHints[Math.floor(Math.random() * gameHints.length)];
 
             createIntermissionParticles();
+            createJumpingPudgies();
             intermissionButton.visible = true;
 
             console.log(`Level ${currentLevel} completed! +${levelCompleteBonus} mana (total: ${mana})`);
@@ -1524,6 +1645,7 @@
         function gameLoop(currentTime) {
             if (gameState === 'intermission') {
                 updateIntermissionParticles();
+                updateJumpingPudgies();
                 drawGame();
                 requestAnimationFrame(gameLoop);
                 return;
