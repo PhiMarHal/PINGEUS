@@ -110,6 +110,100 @@
         let scoreAnimation = { active: false, scale: 1, startTime: 0 };
         let manaAnimation = { active: false, shake: 0, startTime: 0 };
 
+        // Ship sea rocking animation state
+        let shipRotation = 0;
+        let shipBobOffset = 0;
+
+        // Igloo and exit pulse state
+        let iglooScale = 1;
+        let exitScale = 1;
+
+        function startShipSeaRocking() {
+            // Rotational swaying motion (like rocking in waves)
+            const maxRotation = 8 * Math.PI / 180; // 8 degrees in radians
+            const swayDuration = 4000; // 4 seconds
+
+            function updateRotation() {
+                if (gameState !== 'playing') return;
+                const elapsed = Date.now() - gameStartTime;
+                const progress = (elapsed % swayDuration) / swayDuration;
+                // Sine wave that goes from +maxRotation to -maxRotation
+                shipRotation = Math.sin(progress * Math.PI * 2) * maxRotation;
+                requestAnimationFrame(updateRotation);
+            }
+            updateRotation();
+
+            // Vertical bobbing motion
+            const bobDuration = 3000; // 3 seconds
+            const bobAmount = 5; // 5 pixels up/down
+
+            function updateBob() {
+                if (gameState !== 'playing') return;
+                const elapsed = Date.now() - gameStartTime;
+                const progress = (elapsed % bobDuration) / bobDuration;
+                // Sine wave that goes from -bobAmount to +bobAmount
+                shipBobOffset = Math.sin(progress * Math.PI * 2) * bobAmount;
+                requestAnimationFrame(updateBob);
+            }
+            updateBob();
+        }
+
+        function pulseIgloo() {
+            const startTime = Date.now();
+            const duration = 400;
+            const maxScale = 1.15;
+
+            function animate() {
+                const elapsed = Date.now() - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+
+                if (progress < 0.5) {
+                    // Sharp ease out to max scale
+                    const t = progress * 2;
+                    iglooScale = 1 + (maxScale - 1) * (1 - Math.pow(1 - t, 3));
+                } else {
+                    // Sharp ease back to 1
+                    const t = (progress - 0.5) * 2;
+                    iglooScale = maxScale - (maxScale - 1) * (1 - Math.pow(1 - t, 3));
+                }
+
+                if (progress < 1) {
+                    requestAnimationFrame(animate);
+                } else {
+                    iglooScale = 1;
+                }
+            }
+            animate();
+        }
+
+        function pulseExit() {
+            const startTime = Date.now();
+            const duration = 400;
+            const maxScale = 1.15;
+
+            function animate() {
+                const elapsed = Date.now() - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+
+                if (progress < 0.5) {
+                    // Sharp ease out to max scale
+                    const t = progress * 2;
+                    exitScale = 1 + (maxScale - 1) * (1 - Math.pow(1 - t, 3));
+                } else {
+                    // Sharp ease back to 1
+                    const t = (progress - 0.5) * 2;
+                    exitScale = maxScale - (maxScale - 1) * (1 - Math.pow(1 - t, 3));
+                }
+
+                if (progress < 1) {
+                    requestAnimationFrame(animate);
+                } else {
+                    exitScale = 1;
+                }
+            }
+            animate();
+        }
+
         let intermissionButton = {
             x: 0,
             y: 0,
@@ -292,6 +386,9 @@
 
                     scoreAnimation.active = true;
                     scoreAnimation.startTime = Date.now();
+
+                    // Pulse the exit (ship) when penguin is saved
+                    pulseExit();
 
                     console.log(`Penguin saved! Total: ${lemmingsSaved}/${lemmingsSpawned}, Score: ${score}`);
                     return;
@@ -563,13 +660,27 @@
             if (entrance) {
                 const iglooWidth = 128;
                 const iglooHeight = 128;
-                ctx.drawImage(sprites.igloo, entrance.x - iglooWidth / 2, entrance.y - iglooHeight / 2, iglooWidth, iglooHeight);
+
+                // Apply scale for pulse effect
+                ctx.save();
+                ctx.translate(entrance.x, entrance.y);
+                ctx.scale(iglooScale, iglooScale);
+                ctx.drawImage(sprites.igloo, -iglooWidth / 2, -iglooHeight / 2, iglooWidth, iglooHeight);
+                ctx.restore();
             }
 
             if (exit) {
                 const shipWidth = 128;
                 const shipHeight = 128;
-                ctx.drawImage(sprites.ship, exit.x - shipWidth / 2, exit.y - shipHeight / 2, shipWidth, shipHeight);
+
+                // Apply rotation, vertical bob, and scale for pulse effect
+                ctx.save();
+                ctx.translate(exit.x, exit.y);
+                ctx.scale(exitScale, exitScale);
+                ctx.rotate(shipRotation);
+                ctx.translate(0, shipBobOffset);
+                ctx.drawImage(sprites.ship, -shipWidth / 2, -shipHeight / 2, shipWidth, shipHeight);
+                ctx.restore();
             }
         }
 
@@ -1133,6 +1244,9 @@
                 const lemming = new Lemming(entrance.x - 10, entrance.y + 10);
                 lemmings.push(lemming);
                 lemmingsSpawned++;
+
+                // Pulse the igloo when spawning a penguin
+                pulseIgloo();
 
                 console.log(`Spawned penguin ${lemmingsSpawned}/${maxLemmings} at entrance`);
             }
