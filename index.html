@@ -124,7 +124,10 @@
             const swayDuration = 4000; // 4 seconds
 
             function updateRotation() {
-                if (gameState !== 'playing') return;
+                if (gameState !== 'playing') {
+                    requestAnimationFrame(updateRotation);
+                    return;
+                }
                 const elapsed = Date.now() - gameStartTime;
                 const progress = (elapsed % swayDuration) / swayDuration;
                 // Sine wave that goes from +maxRotation to -maxRotation
@@ -138,7 +141,10 @@
             const bobAmount = 5; // 5 pixels up/down
 
             function updateBob() {
-                if (gameState !== 'playing') return;
+                if (gameState !== 'playing') {
+                    requestAnimationFrame(updateBob);
+                    return;
+                }
                 const elapsed = Date.now() - gameStartTime;
                 const progress = (elapsed % bobDuration) / bobDuration;
                 // Sine wave that goes from -bobAmount to +bobAmount
@@ -234,6 +240,7 @@
                 gameStartTime = Date.now();
                 accumulatedTime = 0;
                 lastFrameTime = 0;
+                startShipSeaRocking(); // Start the ship animation
                 requestAnimationFrame(gameLoop);
             }
         }
@@ -1504,6 +1511,7 @@
             gameStartTime = Date.now();
             gameState = 'playing';
             gameActive = true;
+            startShipSeaRocking(); // Restart ship animation for new level
             requestAnimationFrame(gameLoop);
         }
 
