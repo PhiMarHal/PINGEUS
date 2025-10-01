@@ -230,7 +230,9 @@
             pudgy_walk_1: new Image(),
             pudgy_walk_2: new Image(),
             pudgy_walk_3: new Image(),
-            pudgy_walk_4: new Image()
+            pudgy_walk_4: new Image(),
+            pudgy_walk_5: new Image(),
+            pudgy_walk_6: new Image()
         };
 
         sprites.igloo.src = 'assets/igloo.png';
@@ -241,9 +243,11 @@
         sprites.pudgy_walk_2.src = 'assets/pudgy_walk_2.png';
         sprites.pudgy_walk_3.src = 'assets/pudgy_walk_3.png';
         sprites.pudgy_walk_4.src = 'assets/pudgy_walk_4.png';
+        sprites.pudgy_walk_5.src = 'assets/pudgy_walk_5.png';
+        sprites.pudgy_walk_6.src = 'assets/pudgy_walk_6.png';
 
         let spritesLoaded = 0;
-        const totalSprites = 8;
+        const totalSprites = 10;
 
         function onSpriteLoad() {
             spritesLoaded++;
@@ -266,6 +270,8 @@
         sprites.pudgy_walk_2.onload = onSpriteLoad;
         sprites.pudgy_walk_3.onload = onSpriteLoad;
         sprites.pudgy_walk_4.onload = onSpriteLoad;
+        sprites.pudgy_walk_5.onload = onSpriteLoad;
+        sprites.pudgy_walk_6.onload = onSpriteLoad;
 
         sprites.igloo.onerror = () => console.error('Failed to load igloo.png');
         sprites.ship.onerror = () => console.error('Failed to load ship.png');
@@ -275,6 +281,8 @@
         sprites.pudgy_walk_2.onerror = () => console.error('Failed to load pudgy_walk_2.png');
         sprites.pudgy_walk_3.onerror = () => console.error('Failed to load pudgy_walk_3.png');
         sprites.pudgy_walk_4.onerror = () => console.error('Failed to load pudgy_walk_4.png');
+        sprites.pudgy_walk_5.onerror = () => console.error('Failed to load pudgy_walk_5.png');
+        sprites.pudgy_walk_6.onerror = () => console.error('Failed to load pudgy_walk_6.png');
 
         function isSolidPixel(x, y) {
             x = Math.floor(x);
@@ -344,7 +352,7 @@
                 this.bobPhase = Math.random() * Math.PI * 2;
                 this.animationFrame = 0;
                 this.animationCounter = 0;
-                this.animationSpeed = 12; // frames between animation updates
+                this.animationSpeed = 16; // frames between animation updates
             }
 
             update() {
@@ -472,8 +480,8 @@
                 const offsetX = (spriteWidth - this.width) / 2;
                 const offsetY = (spriteHeight - this.height) / 2;
 
-                // Animation sequence: 1, 2, 3, 4, 3, 2 (repeating)
-                const animationSequence = [0, 1, 2, 3, 2, 1];
+                // Animation sequence: 1, 2, 3, 4, 5, 6, 5, 4, 3, 2 (repeating)
+                const animationSequence = [0, 1, 2, 3, 4, 5, 4, 3, 2, 1];
                 const currentFrame = animationSequence[this.animationFrame % animationSequence.length];
 
                 // Get the appropriate walk sprite
@@ -481,7 +489,9 @@
                     sprites.pudgy_walk_1,
                     sprites.pudgy_walk_2,
                     sprites.pudgy_walk_3,
-                    sprites.pudgy_walk_4
+                    sprites.pudgy_walk_4,
+                    sprites.pudgy_walk_5,
+                    sprites.pudgy_walk_6
                 ];
                 const currentSprite = walkSprites[currentFrame];
 
