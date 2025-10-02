@@ -234,7 +234,8 @@
             pudgy_walk_3: new Image(),
             pudgy_walk_4: new Image(),
             pudgy_walk_5: new Image(),
-            pudgy_walk_6: new Image()
+            pudgy_walk_6: new Image(),
+            ground_1: new Image()
         };
 
         sprites.igloo.src = 'assets/igloo.png';
@@ -247,14 +248,22 @@
         sprites.pudgy_walk_4.src = 'assets/pudgy_walk_4.png';
         sprites.pudgy_walk_5.src = 'assets/pudgy_walk_5.png';
         sprites.pudgy_walk_6.src = 'assets/pudgy_walk_6.png';
+        sprites.ground_1.src = 'assets/ground_1.png';
 
         let spritesLoaded = 0;
-        const totalSprites = 10;
+        const totalSprites = 11;
+
+        let groundPattern = null;
+        let currentGroundTexture = 1; // Which ground texture to use
+        let currentOutlineColor = '#00AA00'; // Outline color for current ground texture
 
         function onSpriteLoad() {
             spritesLoaded++;
             if (spritesLoaded === totalSprites) {
                 console.log('All sprites loaded, starting game');
+                // Create the ground pattern from the texture
+                groundPattern = terrainCtx.createPattern(sprites.ground_1, 'repeat');
+                console.log('Ground pattern created:', groundPattern);
                 generateTerrain();
                 gameStartTime = Date.now();
                 accumulatedTime = 0;
@@ -274,6 +283,7 @@
         sprites.pudgy_walk_4.onload = onSpriteLoad;
         sprites.pudgy_walk_5.onload = onSpriteLoad;
         sprites.pudgy_walk_6.onload = onSpriteLoad;
+        sprites.ground_1.onload = onSpriteLoad;
 
         sprites.igloo.onerror = () => console.error('Failed to load igloo.png');
         sprites.ship.onerror = () => console.error('Failed to load ship.png');
@@ -285,6 +295,7 @@
         sprites.pudgy_walk_4.onerror = () => console.error('Failed to load pudgy_walk_4.png');
         sprites.pudgy_walk_5.onerror = () => console.error('Failed to load pudgy_walk_5.png');
         sprites.pudgy_walk_6.onerror = () => console.error('Failed to load pudgy_walk_6.png');
+        sprites.ground_1.onerror = () => console.error('Failed to load ground_1.png');
 
         function isSolidPixel(x, y) {
             x = Math.floor(x);
@@ -628,8 +639,9 @@
                 collisionCtx.restore();
 
                 terrainCtx.save();
-                terrainCtx.fillStyle = '#8B4513';
-                terrainCtx.strokeStyle = '#654321';
+                // Use the texture pattern instead of solid color, with fallback
+                terrainCtx.fillStyle = groundPattern || '#8B4513';
+                terrainCtx.strokeStyle = currentOutlineColor;
                 terrainCtx.lineWidth = 4;
                 terrainCtx.beginPath();
                 terrainCtx.moveTo(blobPoints[0].x, blobPoints[0].y);
@@ -657,7 +669,7 @@
         function drawStaticTerrain() {
             ctx.fillStyle = '#87CEEB';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(collisionCanvas, 0, 0);
+            ctx.drawImage(terrainCanvas, 0, 0); // Draw the terrain canvas with textures, not the collision canvas
             drawSpawnPoints();
         }
 
@@ -1078,6 +1090,7 @@
         function drawLine(line, color) {
             if (!line || line.length < 2) return;
 
+            // Draw to collision canvas (for physics)
             collisionCtx.strokeStyle = color;
             collisionCtx.lineWidth = 12;
             collisionCtx.lineCap = 'round';
@@ -1088,6 +1101,18 @@
                 collisionCtx.lineTo(line[i].x, line[i].y);
             }
             collisionCtx.stroke();
+
+            // Draw to terrain canvas (for visuals)
+            terrainCtx.strokeStyle = color;
+            terrainCtx.lineWidth = 12;
+            terrainCtx.lineCap = 'round';
+            terrainCtx.lineJoin = 'round';
+            terrainCtx.beginPath();
+            terrainCtx.moveTo(line[0].x, line[0].y);
+            for (let i = 1; i < line.length; i++) {
+                terrainCtx.lineTo(line[i].x, line[i].y);
+            }
+            terrainCtx.stroke();
         }
 
         function placePurpleWall(x, y) {
@@ -1159,6 +1184,7 @@
         function applyExplosionHole(x, y, explosionPoints) {
             if (explosionPoints.length < 3) return;
 
+            // Remove from collision canvas (for game logic)
             collisionCtx.save();
             collisionCtx.globalCompositeOperation = 'destination-out';
             collisionCtx.fillStyle = 'rgba(0, 0, 0, 1)';
@@ -1181,6 +1207,30 @@
             );
             collisionCtx.fill();
             collisionCtx.restore();
+
+            // Also remove from terrain canvas (for visuals)
+            terrainCtx.save();
+            terrainCtx.globalCompositeOperation = 'destination-out';
+            terrainCtx.fillStyle = 'rgba(0, 0, 0, 1)';
+            terrainCtx.beginPath();
+            terrainCtx.moveTo(explosionPoints[0].x, explosionPoints[0].y);
+
+            for (let i = 1; i < explosionPoints.length; i++) {
+                const current = explosionPoints[i];
+                const next = explosionPoints[(i + 1) % explosionPoints.length];
+                const cpX = current.x + (next.x - current.x) * 0.5;
+                const cpY = current.y + (next.y - current.y) * 0.5;
+                terrainCtx.quadraticCurveTo(current.x, current.y, cpX, cpY);
+            }
+
+            terrainCtx.quadraticCurveTo(
+                explosionPoints[explosionPoints.length - 1].x,
+                explosionPoints[explosionPoints.length - 1].y,
+                explosionPoints[0].x,
+                explosionPoints[0].y
+            );
+            terrainCtx.fill();
+            terrainCtx.restore();
         }
 
         canvas.addEventListener('mousedown', function (event) {
