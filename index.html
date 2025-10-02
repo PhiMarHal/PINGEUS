@@ -6,8 +6,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Lemmings Game</title>
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Luckiest+Guy&display=swap');
+
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Luckiest Guy', Arial, sans-serif;
             margin: 0;
             padding: 0;
             background-color: #2c3e50;
@@ -390,6 +392,8 @@
                     this.lastAction = "swimming";
                 } else if (!isSolidPixel(groundCheckX, feetY + 1)) {
                     this.vy += 0.5;
+                    // Cap fall speed to prevent tunneling through platforms
+                    this.vy = Math.min(this.vy, 10);
                     this.y += this.vy;
                     this.lastAction = "falling";
                     this.justSteppedUp = false;
@@ -758,7 +762,7 @@
             ctx.strokeRect(button.x, button.y, button.width, button.height);
 
             ctx.fillStyle = '#fff';
-            ctx.font = 'bold 32px Arial';
+            ctx.font = '32px Luckiest Guy, Arial';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
 
@@ -766,7 +770,7 @@
                 const animSpeed = 20;
                 const cycle = Math.floor(button.animationFrame / animSpeed) % 3;
 
-                const arrowY = button.y + button.height / 2;
+                const arrowY = button.y + button.height / 2 + 5;
                 const spacing = 25;
                 const totalWidth = spacing * 2;
                 const startX = button.x + button.width / 2 - totalWidth / 2;
@@ -783,7 +787,7 @@
                 button.animationFrame++;
             } else {
                 ctx.fillStyle = '#fff';
-                ctx.fillText('>', button.x + button.width / 2, button.y + button.height / 2);
+                ctx.fillText('>', button.x + button.width / 2, button.y + button.height / 2 + 5);
                 button.animationFrame = 0;
             }
 
@@ -1374,6 +1378,11 @@
                 lemmings.push(lemming);
                 lemmingsSpawned++;
 
+                // Debug: log animation speed of first penguin each level
+                if (lemmingsSpawned === 1) {
+                    console.log(`Level ${currentLevel} - First penguin animationSpeed: ${lemming.animationSpeed}`);
+                }
+
                 // Pulse the igloo when spawning a penguin
                 pulseIgloo();
 
@@ -1393,7 +1402,7 @@
             ctx.fillStyle = '#FFD700';
             ctx.strokeStyle = '#000000';
             ctx.lineWidth = 4;
-            ctx.font = 'bold 60px Arial';
+            ctx.font = 'bold 60px Luckiest Guy, Arial';
             ctx.textAlign = 'center';
             ctx.strokeText(`LEVEL ${currentLevel} COMPLETED`, canvas.width / 2, 150);
             ctx.fillText(`LEVEL ${currentLevel} COMPLETED`, canvas.width / 2, 150);
@@ -1404,7 +1413,7 @@
             ctx.translate(canvas.width / 2, canvas.height / 2 - 100);
             ctx.scale(pulseScale, pulseScale);
             ctx.fillStyle = '#00BFFF';
-            ctx.font = 'bold 48px Arial';
+            ctx.font = 'bold 48px Luckiest Guy, Arial';
             ctx.strokeText(`+${levelCompleteBonus} mana`, 0, 0);
             ctx.fillText(`+${levelCompleteBonus} mana`, 0, 0);
             ctx.restore();
@@ -1413,7 +1422,7 @@
             ctx.fillStyle = '#FFFFFF';
             ctx.strokeStyle = '#000000';
             ctx.lineWidth = 3;
-            ctx.font = '24px Arial';
+            ctx.font = '24px Luckiest Guy, Arial';
             const maxWidth = canvas.width - 100;
             const lineHeight = 32;
             const words = currentHint.split(' ');
@@ -1447,7 +1456,7 @@
             ctx.strokeRect(intermissionButton.x, intermissionButton.y, intermissionButton.width, intermissionButton.height);
 
             ctx.fillStyle = '#FFFFFF';
-            ctx.font = 'bold 36px Arial';
+            ctx.font = '36px Luckiest Guy, Arial';
             ctx.fillText(`ENTER LEVEL ${currentLevel + 1}`, canvas.width / 2, intermissionButton.y + intermissionButton.height / 2 + 12);
         }
 
@@ -1458,17 +1467,17 @@
             ctx.fillStyle = '#FF4444';
             ctx.strokeStyle = '#000000';
             ctx.lineWidth = 4;
-            ctx.font = 'bold 60px Arial';
+            ctx.font = '60px Luckiest Guy, Arial';
             ctx.textAlign = 'center';
             ctx.strokeText('TIME UP!', canvas.width / 2, canvas.height / 2 - 50);
             ctx.fillText('TIME UP!', canvas.width / 2, canvas.height / 2 - 50);
 
             ctx.fillStyle = '#FFFFFF';
-            ctx.font = 'bold 36px Arial';
+            ctx.font = '36px Luckiest Guy, Arial';
             ctx.strokeText(`Final Score: ${score}`, canvas.width / 2, canvas.height / 2 + 30);
             ctx.fillText(`Final Score: ${score}`, canvas.width / 2, canvas.height / 2 + 30);
 
-            ctx.font = 'bold 28px Arial';
+            ctx.font = '28px Luckiest Guy, Arial';
             ctx.strokeText(`Reached Level ${currentLevel}`, canvas.width / 2, canvas.height / 2 + 80);
             ctx.fillText(`Reached Level ${currentLevel}`, canvas.width / 2, canvas.height / 2 + 80);
         }
@@ -1503,12 +1512,12 @@
             }
 
             ctx.save();
-            ctx.translate(canvas.width / 2, 65);
+            ctx.translate(canvas.width / 2, 55);
             ctx.scale(scoreAnimation.scale, scoreAnimation.scale);
             ctx.fillStyle = '#FFD700';
             ctx.strokeStyle = '#000000';
             ctx.lineWidth = 3;
-            ctx.font = 'bold 48px Arial';
+            ctx.font = '48px Luckiest Guy, Arial';
             ctx.textAlign = 'center';
             ctx.strokeText(`${score}`, 0, 0);
             ctx.fillText(`${score}`, 0, 0);
@@ -1517,7 +1526,7 @@
             ctx.fillStyle = '#FFFFFF';
             ctx.strokeStyle = '#000000';
             ctx.lineWidth = 3;
-            ctx.font = 'bold 36px Arial';
+            ctx.font = '36px Luckiest Guy, Arial';
             ctx.textAlign = 'right';
 
             const remainingTime = Math.max(0, levelTime - accumulatedTime);
@@ -1529,16 +1538,16 @@
             ctx.fillText(timeText, canvas.width - 20, 50);
 
             ctx.textAlign = 'left';
-            ctx.font = 'bold 30px Arial';
+            ctx.font = '30px Luckiest Guy, Arial';
             const penguinText = `${lemmingsSaved}/${lemmingsSpawned}`;
 
             ctx.strokeText(penguinText, 20, 50);
             ctx.fillText(penguinText, 20, 50);
 
             ctx.save();
-            ctx.translate(canvas.width / 2 + manaAnimation.shake, canvas.height - 50);
+            ctx.translate(canvas.width / 2 + manaAnimation.shake, canvas.height - 40);
             ctx.fillStyle = '#00BFFF';
-            ctx.font = 'bold 48px Arial';
+            ctx.font = '48px Luckiest Guy, Arial';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.strokeText(`${mana}`, 0, 0);
@@ -1547,7 +1556,7 @@
 
             if (gameSpeed > 1) {
                 ctx.textAlign = 'center';
-                ctx.font = 'bold 24px Arial';
+                ctx.font = '24px Luckiest Guy, Arial';
                 ctx.fillStyle = '#FFD700';
                 ctx.strokeText(`Speed: ${gameSpeed}x`, speedButton.x + speedButton.width / 2, speedButton.y - 10);
                 ctx.fillText(`Speed: ${gameSpeed}x`, speedButton.x + speedButton.width / 2, speedButton.y - 10);
@@ -1643,7 +1652,7 @@
             gameState = 'playing';
             gameActive = true;
             startShipSeaRocking(); // Restart ship animation for new level
-            requestAnimationFrame(gameLoop);
+            // Don't call requestAnimationFrame here - the game loop is already running!
         }
 
         function nextLevel() {
@@ -1669,9 +1678,11 @@
             if (!gameActive) return;
 
             const deltaTime = lastFrameTime ? currentTime - lastFrameTime : 16.67;
+            // Cap deltaTime to prevent timer catch-up when tabbing back in
+            const cappedDeltaTime = Math.min(deltaTime, 100);
             lastFrameTime = currentTime;
 
-            accumulatedTime += deltaTime * gameSpeed;
+            accumulatedTime += cappedDeltaTime * gameSpeed;
 
             const remainingTime = levelTime - accumulatedTime;
 
