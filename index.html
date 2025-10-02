@@ -42,6 +42,8 @@
         const canvas = document.getElementById('terrainCanvas');
         const ctx = canvas.getContext('2d');
 
+        const BASE_URL = 'https://pingeus.loiyaa.com/assets/';
+
         const collisionCanvas = document.createElement('canvas');
         collisionCanvas.width = canvas.width;
         collisionCanvas.height = canvas.height;
@@ -73,7 +75,7 @@
         let currentLevel = 1;
         let gameActive = true;
         let accumulatedTime = 0;
-        let gameState = 'playing';
+        let gameState = 'start';
         let levelCompleteBonus = 0;
         let currentHint = '';
 
@@ -120,97 +122,17 @@
         let iglooScale = 1;
         let exitScale = 1;
 
-        function startShipSeaRocking() {
-            // Rotational swaying motion (like rocking in waves)
-            const maxRotation = 4 * Math.PI / 180; // 4 degrees in radians
-            const swayDuration = 3000; // 3 seconds
-
-            function updateRotation() {
-                if (gameState !== 'playing') {
-                    requestAnimationFrame(updateRotation);
-                    return;
-                }
-                const elapsed = Date.now() - gameStartTime;
-                const progress = (elapsed % swayDuration) / swayDuration;
-                // Sine wave that goes from +maxRotation to -maxRotation
-                shipRotation = Math.sin(progress * Math.PI * 2) * maxRotation;
-                requestAnimationFrame(updateRotation);
-            }
-            updateRotation();
-
-            // Vertical bobbing motion
-            const bobDuration = 4000; // 4 seconds
-            const bobAmount = 2; // 2 pixels up/down
-
-            function updateBob() {
-                if (gameState !== 'playing') {
-                    requestAnimationFrame(updateBob);
-                    return;
-                }
-                const elapsed = Date.now() - gameStartTime;
-                const progress = (elapsed % bobDuration) / bobDuration;
-                // Sine wave that goes from -bobAmount to +bobAmount
-                shipBobOffset = Math.sin(progress * Math.PI * 2) * bobAmount;
-                requestAnimationFrame(updateBob);
-            }
-            updateBob();
-        }
-
-        function pulseIgloo() {
-            const startTime = Date.now();
-            const duration = 400;
-            const maxScale = 1.15;
-
-            function animate() {
-                const elapsed = Date.now() - startTime;
-                const progress = Math.min(elapsed / duration, 1);
-
-                if (progress < 0.5) {
-                    // Sharp ease out to max scale
-                    const t = progress * 2;
-                    iglooScale = 1 + (maxScale - 1) * (1 - Math.pow(1 - t, 3));
-                } else {
-                    // Sharp ease back to 1
-                    const t = (progress - 0.5) * 2;
-                    iglooScale = maxScale - (maxScale - 1) * (1 - Math.pow(1 - t, 3));
-                }
-
-                if (progress < 1) {
-                    requestAnimationFrame(animate);
-                } else {
-                    iglooScale = 1;
-                }
-            }
-            animate();
-        }
-
-        function pulseExit() {
-            const startTime = Date.now();
-            const duration = 400;
-            const maxScale = 1.15;
-
-            function animate() {
-                const elapsed = Date.now() - startTime;
-                const progress = Math.min(elapsed / duration, 1);
-
-                if (progress < 0.5) {
-                    // Sharp ease out to max scale
-                    const t = progress * 2;
-                    exitScale = 1 + (maxScale - 1) * (1 - Math.pow(1 - t, 3));
-                } else {
-                    // Sharp ease back to 1
-                    const t = (progress - 0.5) * 2;
-                    exitScale = maxScale - (maxScale - 1) * (1 - Math.pow(1 - t, 3));
-                }
-
-                if (progress < 1) {
-                    requestAnimationFrame(animate);
-                } else {
-                    exitScale = 1;
-                }
-            }
-            animate();
-        }
+        // Start screen
+        let startScreenPenguins = [];
+        let lastStartPenguinSpawn = 0;
+        const START_PENGUIN_INTERVAL = 2000;
+        let startButton = {
+            x: 0,
+            y: 0,
+            width: 300,
+            height: 80,
+            visible: true
+        };
 
         let intermissionButton = {
             x: 0,
@@ -222,6 +144,133 @@
 
         // Jumping pudgies for intermission screen
         let jumpingPudgies = [];
+
+        let groundPattern = null;
+        let currentGroundTexture = 1;
+        let currentOutlineColor = '#00AA00';
+
+        // Music system
+        const TOTAL_TRACKS = 20;
+        let musicPlaylist = [];
+        let currentTrackIndex = 0;
+        let currentAudio = null;
+        let nextAudio = null;
+        let musicEnabled = true;
+        let nextTrackPreloadTimer = null;
+
+        function shuffleArray(array) {
+            const shuffled = [...array];
+            for (let i = shuffled.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+            }
+            return shuffled;
+        }
+
+        function initMusicPlaylist() {
+            const tracks = Array.from({ length: TOTAL_TRACKS }, (_, i) => i + 1);
+            musicPlaylist = shuffleArray(tracks);
+            console.log('Music playlist shuffled:', musicPlaylist);
+        }
+
+        function formatTrackNumber(num) {
+            return num.toString().padStart(2, '0');
+        }
+
+        function loadTrack(trackNumber) {
+            const audio = new Audio();
+            const trackNum = formatTrackNumber(trackNumber);
+            audio.src = BASE_URL + `track_${trackNum}.mp3`;
+            audio.preload = 'auto';
+            console.log(`Loading track ${trackNum}`);
+            return audio;
+        }
+
+        function playNextTrack() {
+            if (!musicEnabled) return;
+
+            currentTrackIndex = (currentTrackIndex + 1) % musicPlaylist.length;
+            const trackNumber = musicPlaylist[currentTrackIndex];
+
+            if (nextAudio && nextAudio.src.includes(`track_${formatTrackNumber(trackNumber)}`)) {
+                currentAudio = nextAudio;
+                nextAudio = null;
+            } else {
+                currentAudio = loadTrack(trackNumber);
+            }
+
+            setTimeout(() => {
+                if (musicEnabled && currentAudio) {
+                    currentAudio.play().catch(err => console.log('Music play error:', err));
+                    console.log(`Playing track ${formatTrackNumber(trackNumber)}`);
+
+                    nextTrackPreloadTimer = setTimeout(() => {
+                        const nextTrackIndex = (currentTrackIndex + 1) % musicPlaylist.length;
+                        const nextTrackNumber = musicPlaylist[nextTrackIndex];
+                        nextAudio = loadTrack(nextTrackNumber);
+                    }, 60000);
+                }
+            }, 4000);
+
+            currentAudio.onended = () => {
+                playNextTrack();
+            };
+        }
+
+        function startMusic() {
+            if (!musicEnabled) return;
+
+            initMusicPlaylist();
+            const firstTrack = musicPlaylist[0];
+            currentAudio = loadTrack(firstTrack);
+
+            currentAudio.addEventListener('canplaythrough', () => {
+                if (musicEnabled) {
+                    currentAudio.play().catch(err => console.log('Music play error:', err));
+                    console.log(`Playing first track ${formatTrackNumber(firstTrack)}`);
+
+                    nextTrackPreloadTimer = setTimeout(() => {
+                        const nextTrackIndex = (currentTrackIndex + 1) % musicPlaylist.length;
+                        const nextTrackNumber = musicPlaylist[nextTrackIndex];
+                        nextAudio = loadTrack(nextTrackNumber);
+                    }, 60000);
+                }
+            }, { once: true });
+
+            currentAudio.onended = () => {
+                playNextTrack();
+            };
+        }
+
+        function pauseMusic() {
+            if (currentAudio && !currentAudio.paused) {
+                currentAudio.pause();
+                console.log('Music paused');
+            }
+        }
+
+        function resumeMusic() {
+            if (currentAudio && currentAudio.paused) {
+                currentAudio.play().catch(err => console.log('Music play error:', err));
+                console.log('Music resumed');
+            }
+        }
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                pauseMusic();
+            } else {
+                resumeMusic();
+            }
+        });
+
+        window.addEventListener('blur', () => {
+            pauseMusic();
+        });
+
+        window.addEventListener('focus', () => {
+            resumeMusic();
+        });
 
         // Load sprites
         const sprites = {
@@ -238,37 +287,28 @@
             ground_1: new Image()
         };
 
-        sprites.igloo.src = 'assets/igloo.png';
-        sprites.ship.src = 'assets/ship.png';
-        sprites.penguin.src = 'assets/penguin.png';
-        sprites.pudgy_jump.src = 'assets/pudgy_jump.png';
-        sprites.pudgy_walk_1.src = 'assets/pudgy_walk_1.png';
-        sprites.pudgy_walk_2.src = 'assets/pudgy_walk_2.png';
-        sprites.pudgy_walk_3.src = 'assets/pudgy_walk_3.png';
-        sprites.pudgy_walk_4.src = 'assets/pudgy_walk_4.png';
-        sprites.pudgy_walk_5.src = 'assets/pudgy_walk_5.png';
-        sprites.pudgy_walk_6.src = 'assets/pudgy_walk_6.png';
-        sprites.ground_1.src = 'assets/ground_1.png';
+        sprites.igloo.src = BASE_URL + 'igloo.png';
+        sprites.ship.src = BASE_URL + 'ship.png';
+        sprites.penguin.src = BASE_URL + 'penguin.png';
+        sprites.pudgy_jump.src = BASE_URL + 'pudgy_jump.png';
+        sprites.pudgy_walk_1.src = BASE_URL + 'pudgy_walk_1.png';
+        sprites.pudgy_walk_2.src = BASE_URL + 'pudgy_walk_2.png';
+        sprites.pudgy_walk_3.src = BASE_URL + 'pudgy_walk_3.png';
+        sprites.pudgy_walk_4.src = BASE_URL + 'pudgy_walk_4.png';
+        sprites.pudgy_walk_5.src = BASE_URL + 'pudgy_walk_5.png';
+        sprites.pudgy_walk_6.src = BASE_URL + 'pudgy_walk_6.png';
+        sprites.ground_1.src = BASE_URL + 'ground_1.png';
 
         let spritesLoaded = 0;
         const totalSprites = 11;
 
-        let groundPattern = null;
-        let currentGroundTexture = 1; // Which ground texture to use
-        let currentOutlineColor = '#00AA00'; // Outline color for current ground texture
-
         function onSpriteLoad() {
             spritesLoaded++;
             if (spritesLoaded === totalSprites) {
-                console.log('All sprites loaded, starting game');
-                // Create the ground pattern from the texture
+                console.log('All sprites loaded, showing start screen');
                 groundPattern = terrainCtx.createPattern(sprites.ground_1, 'repeat');
                 console.log('Ground pattern created:', groundPattern);
-                generateTerrain();
-                gameStartTime = Date.now();
-                accumulatedTime = 0;
-                lastFrameTime = 0;
-                startShipSeaRocking(); // Start the ship animation
+
                 requestAnimationFrame(gameLoop);
             }
         }
@@ -350,6 +390,90 @@
             return true;
         }
 
+        function startShipSeaRocking() {
+            const maxRotation = 4 * Math.PI / 180;
+            const swayDuration = 3000;
+
+            function updateRotation() {
+                if (gameState !== 'playing') {
+                    requestAnimationFrame(updateRotation);
+                    return;
+                }
+                const elapsed = Date.now() - gameStartTime;
+                const progress = (elapsed % swayDuration) / swayDuration;
+                shipRotation = Math.sin(progress * Math.PI * 2) * maxRotation;
+                requestAnimationFrame(updateRotation);
+            }
+            updateRotation();
+
+            const bobDuration = 4000;
+            const bobAmount = 2;
+
+            function updateBob() {
+                if (gameState !== 'playing') {
+                    requestAnimationFrame(updateBob);
+                    return;
+                }
+                const elapsed = Date.now() - gameStartTime;
+                const progress = (elapsed % bobDuration) / bobDuration;
+                shipBobOffset = Math.sin(progress * Math.PI * 2) * bobAmount;
+                requestAnimationFrame(updateBob);
+            }
+            updateBob();
+        }
+
+        function pulseIgloo() {
+            const startTime = Date.now();
+            const duration = 400;
+            const maxScale = 1.15;
+
+            function animate() {
+                const elapsed = Date.now() - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+
+                if (progress < 0.5) {
+                    const t = progress * 2;
+                    iglooScale = 1 + (maxScale - 1) * (1 - Math.pow(1 - t, 3));
+                } else {
+                    const t = (progress - 0.5) * 2;
+                    iglooScale = maxScale - (maxScale - 1) * (1 - Math.pow(1 - t, 3));
+                }
+
+                if (progress < 1) {
+                    requestAnimationFrame(animate);
+                } else {
+                    iglooScale = 1;
+                }
+            }
+            animate();
+        }
+
+        function pulseExit() {
+            const startTime = Date.now();
+            const duration = 400;
+            const maxScale = 1.15;
+
+            function animate() {
+                const elapsed = Date.now() - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+
+                if (progress < 0.5) {
+                    const t = progress * 2;
+                    exitScale = 1 + (maxScale - 1) * (1 - Math.pow(1 - t, 3));
+                } else {
+                    const t = (progress - 0.5) * 2;
+                    exitScale = maxScale - (maxScale - 1) * (1 - Math.pow(1 - t, 3));
+                }
+
+                if (progress < 1) {
+                    requestAnimationFrame(animate);
+                } else {
+                    exitScale = 1;
+                }
+            }
+            animate();
+        }
+
         class Lemming {
             constructor(x, y) {
                 this.x = x;
@@ -364,8 +488,8 @@
                 this.swimming = false;
                 this.bobPhase = Math.random() * Math.PI * 2;
                 this.animationFrame = 0;
-                this.animationCounter = 0;
-                this.animationSpeed = 16; // frames between animation updates
+                this.lastAnimationTime = performance.now();
+                this.animationInterval = 125; // ms between animation frames
             }
 
             update() {
@@ -403,7 +527,6 @@
                     this.lastAction = "swimming";
                 } else if (!isSolidPixel(groundCheckX, feetY + 1)) {
                     this.vy += 0.5;
-                    // Cap fall speed to prevent tunneling through platforms
                     this.vy = Math.min(this.vy, 10);
                     this.y += this.vy;
                     this.lastAction = "falling";
@@ -443,7 +566,6 @@
                     scoreAnimation.active = true;
                     scoreAnimation.startTime = Date.now();
 
-                    // Pulse the exit (ship) when penguin is saved
                     pulseExit();
 
                     console.log(`Penguin saved! Total: ${lemmingsSaved}/${lemmingsSpawned}, Score: ${score}`);
@@ -495,11 +617,16 @@
                 const offsetX = (spriteWidth - this.width) / 2;
                 const offsetY = (spriteHeight - this.height) / 2;
 
-                // Animation sequence: 1, 2, 3, 4, 5, 6, 5, 4, 3, 2 (repeating)
+                // Update animation based on elapsed time
+                const now = performance.now();
+                if (now - this.lastAnimationTime >= this.animationInterval) {
+                    this.animationFrame++;
+                    this.lastAnimationTime = now;
+                }
+
                 const animationSequence = [0, 1, 2, 3, 4, 5, 4, 3, 2, 1];
                 const currentFrame = animationSequence[this.animationFrame % animationSequence.length];
 
-                // Get the appropriate walk sprite
                 const walkSprites = [
                     sprites.pudgy_walk_1,
                     sprites.pudgy_walk_2,
@@ -510,14 +637,6 @@
                 ];
                 const currentSprite = walkSprites[currentFrame];
 
-                // Update animation counter
-                this.animationCounter++;
-                if (this.animationCounter >= this.animationSpeed) {
-                    this.animationCounter = 0;
-                    this.animationFrame++;
-                }
-
-                // Flip horizontally if moving left
                 if (this.vx < 0) {
                     ctx.translate(this.x + this.width + offsetX, this.y - offsetY);
                     ctx.scale(-1, 1);
@@ -525,6 +644,60 @@
                 } else {
                     ctx.drawImage(currentSprite, this.x - offsetX, this.y - offsetY, spriteWidth, spriteHeight);
                 }
+
+                ctx.restore();
+            }
+        }
+
+        class StartScreenPenguin {
+            constructor() {
+                this.x = -50;
+                this.y = canvas.height / 2 - 19;
+                this.vx = 0.125;
+                this.width = 25;
+                this.height = 38;
+                this.animationFrame = 0;
+                this.lastAnimationTime = performance.now();
+                this.animationInterval = 125; // ms between animation frames (matches 144 FPS with speed 16)
+            }
+
+            update() {
+                this.x += this.vx;
+            }
+
+            isOffScreen() {
+                return this.x > canvas.width + 50;
+            }
+
+            draw() {
+                ctx.save();
+
+                const spriteWidth = 40;
+                const spriteHeight = 60;
+                const offsetX = (spriteWidth - this.width) / 2;
+                const offsetY = (spriteHeight - this.height) / 2;
+
+                // Update animation based on elapsed time
+                const now = performance.now();
+                if (now - this.lastAnimationTime >= this.animationInterval) {
+                    this.animationFrame++;
+                    this.lastAnimationTime = now;
+                }
+
+                const animationSequence = [0, 1, 2, 3, 4, 5, 4, 3, 2, 1];
+                const currentFrame = animationSequence[this.animationFrame % animationSequence.length];
+
+                const walkSprites = [
+                    sprites.pudgy_walk_1,
+                    sprites.pudgy_walk_2,
+                    sprites.pudgy_walk_3,
+                    sprites.pudgy_walk_4,
+                    sprites.pudgy_walk_5,
+                    sprites.pudgy_walk_6
+                ];
+                const currentSprite = walkSprites[currentFrame];
+
+                ctx.drawImage(currentSprite, this.x - offsetX, this.y - offsetY, spriteWidth, spriteHeight);
 
                 ctx.restore();
             }
@@ -639,7 +812,6 @@
                 collisionCtx.restore();
 
                 terrainCtx.save();
-                // Use the texture pattern instead of solid color, with fallback
                 terrainCtx.fillStyle = groundPattern || '#8B4513';
                 terrainCtx.strokeStyle = currentOutlineColor;
                 terrainCtx.lineWidth = 4;
@@ -669,7 +841,7 @@
         function drawStaticTerrain() {
             ctx.fillStyle = '#87CEEB';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(terrainCanvas, 0, 0); // Draw the terrain canvas with textures, not the collision canvas
+            ctx.drawImage(terrainCanvas, 0, 0);
             drawSpawnPoints();
         }
 
@@ -740,7 +912,6 @@
                 const iglooWidth = 128;
                 const iglooHeight = 128;
 
-                // Apply scale for pulse effect
                 ctx.save();
                 ctx.translate(entrance.x, entrance.y);
                 ctx.scale(iglooScale, iglooScale);
@@ -752,7 +923,6 @@
                 const shipWidth = 128;
                 const shipHeight = 128;
 
-                // Apply rotation, vertical bob, and scale for pulse effect
                 ctx.save();
                 ctx.translate(exit.x, exit.y);
                 ctx.scale(exitScale, exitScale);
@@ -952,7 +1122,6 @@
             const pudgyHeight = 716;
             const startTime = performance.now();
 
-            // Three pudgies at different horizontal positions with different delays
             const positions = [
                 { x: canvas.width * 0.2, delay: 0 },
                 { x: canvas.width * 0.5, delay: 800 },
@@ -967,7 +1136,7 @@
                     height: pudgyHeight,
                     startY: canvas.height + pudgyHeight / 2,
                     targetY: canvas.height / 2,
-                    jumpDuration: 2000, // 2 seconds for full jump cycle
+                    jumpDuration: 2000,
                     startTime: startTime + pos.delay,
                     active: false
                 });
@@ -986,10 +1155,6 @@
                     const elapsed = now - pudgy.startTime;
                     const progress = (elapsed % pudgy.jumpDuration) / pudgy.jumpDuration;
 
-                    // Parabolic motion - goes up and comes back down
-                    // At progress 0: at startY (below screen)
-                    // At progress 0.5: at targetY (middle of screen)
-                    // At progress 1: back at startY (below screen)
                     const heightDiff = pudgy.startY - pudgy.targetY;
                     pudgy.y = pudgy.startY - heightDiff * (1 - Math.pow(2 * progress - 1, 2));
                 }
@@ -1090,7 +1255,6 @@
         function drawLine(line, color) {
             if (!line || line.length < 2) return;
 
-            // Draw to collision canvas (for physics)
             collisionCtx.strokeStyle = color;
             collisionCtx.lineWidth = 12;
             collisionCtx.lineCap = 'round';
@@ -1102,7 +1266,6 @@
             }
             collisionCtx.stroke();
 
-            // Draw to terrain canvas (for visuals)
             terrainCtx.strokeStyle = color;
             terrainCtx.lineWidth = 12;
             terrainCtx.lineCap = 'round';
@@ -1184,7 +1347,6 @@
         function applyExplosionHole(x, y, explosionPoints) {
             if (explosionPoints.length < 3) return;
 
-            // Remove from collision canvas (for game logic)
             collisionCtx.save();
             collisionCtx.globalCompositeOperation = 'destination-out';
             collisionCtx.fillStyle = 'rgba(0, 0, 0, 1)';
@@ -1208,7 +1370,6 @@
             collisionCtx.fill();
             collisionCtx.restore();
 
-            // Also remove from terrain canvas (for visuals)
             terrainCtx.save();
             terrainCtx.globalCompositeOperation = 'destination-out';
             terrainCtx.fillStyle = 'rgba(0, 0, 0, 1)';
@@ -1233,8 +1394,61 @@
             terrainCtx.restore();
         }
 
+        function drawStartScreen() {
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            startScreenPenguins.forEach(penguin => penguin.draw());
+
+            ctx.fillStyle = '#FFD700';
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 4;
+            ctx.font = '80px Luckiest Guy, Arial';
+            ctx.textAlign = 'center';
+            ctx.strokeText('PINGEUS', canvas.width / 2, 150);
+            ctx.fillText('PINGEUS', canvas.width / 2, 150);
+
+            startButton.x = canvas.width / 2 - startButton.width / 2;
+            startButton.y = canvas.height - 200;
+
+            ctx.fillStyle = '#4CAF50';
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 3;
+            ctx.fillRect(startButton.x, startButton.y, startButton.width, startButton.height);
+            ctx.strokeRect(startButton.x, startButton.y, startButton.width, startButton.height);
+
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = '48px Luckiest Guy, Arial';
+            ctx.fillText('PLAY', canvas.width / 2, startButton.y + startButton.height / 2 + 15);
+        }
+
+        function updateStartScreen() {
+            startScreenPenguins.forEach(penguin => penguin.update());
+            startScreenPenguins = startScreenPenguins.filter(penguin => !penguin.isOffScreen());
+        }
+
+        function startGame() {
+            console.log('Starting game!');
+            gameState = 'playing';
+            startScreenPenguins = [];
+            generateTerrain();
+            gameStartTime = Date.now();
+            accumulatedTime = 0;
+            lastFrameTime = 0;
+            gameActive = true;
+            startMusic();
+        }
+
         canvas.addEventListener('mousedown', function (event) {
             const pos = getMousePos(event);
+
+            if (gameState === 'start' && startButton.visible) {
+                if (isPointInButton(pos.x, pos.y, startButton)) {
+                    startGame();
+                    startShipSeaRocking();
+                    return;
+                }
+            }
 
             if (gameState === 'intermission' && intermissionButton.visible) {
                 if (isPointInButton(pos.x, pos.y, intermissionButton)) {
@@ -1329,6 +1543,14 @@
         canvas.addEventListener('touchstart', function (event) {
             event.preventDefault();
             const pos = getTouchPos(event);
+
+            if (gameState === 'start' && startButton.visible) {
+                if (isPointInButton(pos.x, pos.y, startButton)) {
+                    startGame();
+                    startShipSeaRocking();
+                    return;
+                }
+            }
 
             if (gameState === 'intermission' && intermissionButton.visible) {
                 if (isPointInButton(pos.x, pos.y, intermissionButton)) {
@@ -1428,12 +1650,10 @@
                 lemmings.push(lemming);
                 lemmingsSpawned++;
 
-                // Debug: log animation speed of first penguin each level
                 if (lemmingsSpawned === 1) {
                     console.log(`Level ${currentLevel} - First penguin animationSpeed: ${lemming.animationSpeed}`);
                 }
 
-                // Pulse the igloo when spawning a penguin
                 pulseIgloo();
 
                 console.log(`Spawned penguin ${lemmingsSpawned}/${maxLemmings} at entrance`);
@@ -1444,7 +1664,6 @@
             ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Draw jumping pudgies behind everything else
             drawJumpingPudgies();
 
             drawIntermissionParticles();
@@ -1452,23 +1671,21 @@
             ctx.fillStyle = '#FFD700';
             ctx.strokeStyle = '#000000';
             ctx.lineWidth = 4;
-            ctx.font = 'bold 60px Luckiest Guy, Arial';
+            ctx.font = '60px Luckiest Guy, Arial';
             ctx.textAlign = 'center';
             ctx.strokeText(`LEVEL ${currentLevel} COMPLETED`, canvas.width / 2, 150);
             ctx.fillText(`LEVEL ${currentLevel} COMPLETED`, canvas.width / 2, 150);
 
-            // Pulsing mana bonus text
             const pulseScale = 1 + Math.sin(Date.now() / 300) * 0.05;
             ctx.save();
             ctx.translate(canvas.width / 2, canvas.height / 2 - 100);
             ctx.scale(pulseScale, pulseScale);
             ctx.fillStyle = '#00BFFF';
-            ctx.font = 'bold 48px Luckiest Guy, Arial';
+            ctx.font = '48px Luckiest Guy, Arial';
             ctx.strokeText(`+${levelCompleteBonus} mana`, 0, 0);
             ctx.fillText(`+${levelCompleteBonus} mana`, 0, 0);
             ctx.restore();
 
-            // Hint text with word wrapping
             ctx.fillStyle = '#FFFFFF';
             ctx.strokeStyle = '#000000';
             ctx.lineWidth = 3;
@@ -1495,7 +1712,6 @@
             ctx.strokeText(line, canvas.width / 2, y);
             ctx.fillText(line, canvas.width / 2, y);
 
-            // Button
             intermissionButton.x = canvas.width / 2 - intermissionButton.width / 2;
             intermissionButton.y = canvas.height - 200;
 
@@ -1701,8 +1917,7 @@
             gameStartTime = Date.now();
             gameState = 'playing';
             gameActive = true;
-            startShipSeaRocking(); // Restart ship animation for new level
-            // Don't call requestAnimationFrame here - the game loop is already running!
+            startShipSeaRocking();
         }
 
         function nextLevel() {
@@ -1712,6 +1927,18 @@
         let lastFrameTime = 0;
 
         function gameLoop(currentTime) {
+            if (gameState === 'start') {
+                if (currentTime - lastStartPenguinSpawn > START_PENGUIN_INTERVAL) {
+                    startScreenPenguins.push(new StartScreenPenguin());
+                    lastStartPenguinSpawn = currentTime;
+                }
+
+                updateStartScreen();
+                drawStartScreen();
+                requestAnimationFrame(gameLoop);
+                return;
+            }
+
             if (gameState === 'intermission') {
                 updateIntermissionParticles();
                 updateJumpingPudgies();
@@ -1728,7 +1955,6 @@
             if (!gameActive) return;
 
             const deltaTime = lastFrameTime ? currentTime - lastFrameTime : 16.67;
-            // Cap deltaTime to prevent timer catch-up when tabbing back in
             const cappedDeltaTime = Math.min(deltaTime, 100);
             lastFrameTime = currentTime;
 
@@ -1787,8 +2013,6 @@
                 requestAnimationFrame(gameLoop);
             }
         }
-
-        // Game will start automatically after sprites load
     </script>
 </body>
 
