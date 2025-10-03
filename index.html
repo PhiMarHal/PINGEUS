@@ -533,7 +533,41 @@
                     // Terminal velocity: 1440 pixels/second (10 px/frame * 144 fps = 1440)
                     this.vy += 10368 * dt;
                     this.vy = Math.min(this.vy, 1440);
-                    this.y += this.vy * dt;
+
+                    // Calculate fall distance and check for collisions along the path
+                    const fallDistance = this.vy * dt;
+                    const oldY = this.y;
+                    let landed = false;
+
+                    // Check in steps of 2 pixels to avoid tunneling through thin platforms
+                    const steps = Math.ceil(fallDistance / 2);
+                    const stepSize = fallDistance / steps;
+
+                    for (let step = 1; step <= steps; step++) {
+                        const checkY = oldY + stepSize * step;
+                        const checkFeetY = checkY + this.height;
+
+                        if (isSolidPixel(groundCheckX, checkFeetY)) {
+                            // Hit ground during fall, snap to surface
+                            this.y = checkY;
+                            this.vy = 0;
+                            landed = true;
+
+                            // Snap to exact surface
+                            for (let checkY2 = checkFeetY - 3; checkY2 <= checkFeetY + 3; checkY2++) {
+                                if (isSolidPixel(groundCheckX, checkY2)) {
+                                    this.y = checkY2 - this.height;
+                                    break;
+                                }
+                            }
+                            break;
+                        }
+                    }
+
+                    if (!landed) {
+                        this.y += fallDistance;
+                    }
+
                     this.lastAction = "falling";
                     this.justSteppedUp = false;
                 } else {
