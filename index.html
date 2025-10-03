@@ -110,9 +110,13 @@
         let bobbingPenguins = [];
         let particles = [];
         let intermissionParticles = [];
+        let foamParticles = [];
 
         let scoreAnimation = { active: false, scale: 1, startTime: 0 };
         let manaAnimation = { active: false, shake: 0, startTime: 0 };
+
+        // Sea animation state
+        let seaWaveOffset = 0;
 
         // Ship sea rocking animation state
         let shipRotation = 0;
@@ -1232,6 +1236,96 @@
             particles = particles.filter(p => p.life > 0);
         }
 
+        function updateSea(deltaTime) {
+            seaWaveOffset += 0.002 * deltaTime;
+
+            // Spawn foam particles occasionally
+            if (Math.random() < 0.3) {
+                const seaY = canvas.height - 18;
+                const x = Math.random() * canvas.width;
+
+                // Calculate wave height at this x position
+                const wave1 = Math.sin(x * 0.02 + seaWaveOffset) * 2;
+                const wave2 = Math.sin(x * 0.03 - seaWaveOffset * 1.5) * 1.5;
+                const waveY = seaY + wave1 + wave2;
+
+                foamParticles.push({
+                    x: x,
+                    y: waveY - 1,
+                    vx: 0.3 + Math.random() * 0.4,
+                    vy: (Math.random() - 0.5) * 0.2,
+                    life: 1.0,
+                    decay: 0.015 + Math.random() * 0.01,
+                    size: 1 + Math.random() * 2
+                });
+            }
+
+            // Update foam particles
+            foamParticles.forEach(p => {
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life -= p.decay;
+            });
+            foamParticles = foamParticles.filter(p => p.life > 0 && p.x < canvas.width + 10);
+        }
+
+        function drawSea() {
+            const seaHeight = 18;
+            const seaY = canvas.height - seaHeight;
+
+            ctx.save();
+
+            // Draw the sea as a filled wave shape
+            ctx.fillStyle = 'rgba(30, 100, 180, 0.85)';
+            ctx.beginPath();
+
+            // Start from bottom-left
+            ctx.moveTo(0, canvas.height);
+            ctx.lineTo(0, seaY);
+
+            // Draw the wavy top edge
+            for (let x = 0; x <= canvas.width; x += 2) {
+                const wave1 = Math.sin(x * 0.02 + seaWaveOffset) * 2;
+                const wave2 = Math.sin(x * 0.03 - seaWaveOffset * 1.5) * 1.5;
+                const wave3 = Math.sin(x * 0.015 + seaWaveOffset * 0.8) * 1;
+                const y = seaY + wave1 + wave2 + wave3;
+                ctx.lineTo(x, y);
+            }
+
+            // Complete the shape back to bottom
+            ctx.lineTo(canvas.width, canvas.height);
+            ctx.closePath();
+            ctx.fill();
+
+            // Add a lighter wave overlay for depth
+            ctx.fillStyle = 'rgba(60, 140, 220, 0.4)';
+            ctx.beginPath();
+            ctx.moveTo(0, canvas.height);
+            ctx.lineTo(0, seaY + 4);
+
+            for (let x = 0; x <= canvas.width; x += 2) {
+                const wave1 = Math.sin(x * 0.025 - seaWaveOffset * 2) * 1.5;
+                const wave2 = Math.sin(x * 0.018 + seaWaveOffset * 1.2) * 1;
+                const y = seaY + 4 + wave1 + wave2;
+                ctx.lineTo(x, y);
+            }
+
+            ctx.lineTo(canvas.width, canvas.height);
+            ctx.closePath();
+            ctx.fill();
+
+            // Draw foam particles
+            foamParticles.forEach(p => {
+                ctx.globalAlpha = p.life * 0.9;
+                ctx.fillStyle = '#FFFFFF';
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            ctx.restore();
+        }
+
         function updateIntermissionParticles() {
             const now = performance.now();
             intermissionParticles.forEach(p => {
@@ -1886,6 +1980,7 @@
             }
 
             drawStaticTerrain();
+            drawSea();
 
             if (isDrawing && drawStart && drawCurrent && currentSpell === 'blue') {
                 const snappedLine = getSnappedLine(drawStart, drawCurrent);
@@ -2044,6 +2139,7 @@
             for (let i = 0; i < updatesPerFrame; i++) {
                 lemmings.forEach(lemming => lemming.update(cappedDeltaTime));
                 updateParticles();
+                updateSea(cappedDeltaTime);
             }
 
             lemmings = lemmings.filter(lemming => lemming.alive);
