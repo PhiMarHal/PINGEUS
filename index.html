@@ -145,6 +145,24 @@
             visible: true
         };
 
+        let helpButton = {
+            x: 0,
+            y: 0,
+            width: 225,
+            height: 60,
+            visible: true
+        };
+
+        let helpPopup = {
+            visible: false,
+            okButton: {
+                x: 0,
+                y: 0,
+                width: 200,
+                height: 60
+            }
+        };
+
         let intermissionButton = {
             x: 0,
             y: 0,
@@ -283,6 +301,10 @@
                 pauseMusic();
             } else {
                 resumeMusic();
+                // Reset start screen spawn timer to prevent immediate spawning
+                if (gameState === 'start') {
+                    lastStartPenguinSpawn = performance.now();
+                }
             }
         });
 
@@ -1603,8 +1625,9 @@
             ctx.strokeText('PINGEUS', canvas.width / 2, 150);
             ctx.fillText('PINGEUS', canvas.width / 2, 150);
 
+            // Draw PLAY button (moved up)
             startButton.x = canvas.width / 2 - startButton.width / 2;
-            startButton.y = canvas.height - 200;
+            startButton.y = canvas.height - 300;
 
             ctx.fillStyle = '#4CAF50';
             ctx.strokeStyle = '#fff';
@@ -1615,6 +1638,109 @@
             ctx.fillStyle = '#FFFFFF';
             ctx.font = '48px Luckiest Guy, Arial';
             ctx.fillText('PLAY', canvas.width / 2, startButton.y + startButton.height / 2 + 15);
+
+            // Draw HELP button (moved further down)
+            helpButton.x = canvas.width / 2 - helpButton.width / 2;
+            helpButton.y = canvas.height - 180;
+
+            ctx.fillStyle = '#FF4444';
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 3;
+            ctx.fillRect(helpButton.x, helpButton.y, helpButton.width, helpButton.height);
+            ctx.strokeRect(helpButton.x, helpButton.y, helpButton.width, helpButton.height);
+
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = '36px Luckiest Guy, Arial';
+            ctx.fillText('HELP', canvas.width / 2, helpButton.y + helpButton.height / 2 + 12);
+
+            // Draw help popup if visible
+            if (helpPopup.visible) {
+                drawHelpPopup();
+            }
+        }
+
+        function drawHelpPopup() {
+            // Semi-transparent overlay
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Popup box (80% of screen)
+            const popupWidth = canvas.width * 0.8;
+            const popupHeight = canvas.height * 0.8;
+            const popupX = (canvas.width - popupWidth) / 2;
+            const popupY = (canvas.height - popupHeight) / 2;
+
+            ctx.fillStyle = '#2c3e50';
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 4;
+            ctx.fillRect(popupX, popupY, popupWidth, popupHeight);
+            ctx.strokeRect(popupX, popupY, popupWidth, popupHeight);
+
+            // Content
+            ctx.textAlign = 'center';
+
+            // Title in gold (25% bigger, try one line)
+            ctx.fillStyle = '#FFD700';
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 3;
+            ctx.font = '38px Luckiest Guy, Arial';
+            let yPos = popupY + 90;
+            ctx.strokeText('LEAD PENGUS FROM IGLOO TO SHIP', canvas.width / 2, yPos);
+            ctx.fillText('LEAD PENGUS FROM IGLOO TO SHIP', canvas.width / 2, yPos);
+            yPos += 120;
+
+            ctx.strokeStyle = 'transparent';
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = '34px Luckiest Guy, Arial';
+            ctx.fillText('Your spells:', canvas.width / 2, yPos);
+            yPos += 120;
+
+            // Spell icons and descriptions (25% bigger)
+            ctx.font = '30px Luckiest Guy, Arial';
+            const iconSize = 60;
+            const iconX = canvas.width / 2 - 240;
+
+            // Blue spell
+            ctx.fillStyle = '#0066FF';
+            ctx.beginPath();
+            ctx.arc(iconX, yPos, iconSize / 2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#FFFFFF';
+            ctx.textAlign = 'left';
+            ctx.fillText('Draw bridges and ramps', iconX + 50, yPos + 10);
+            yPos += 120;
+
+            // Red spell
+            ctx.fillStyle = '#FF4444';
+            ctx.beginPath();
+            ctx.arc(iconX, yPos, iconSize / 2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillText('Blow up the terrain', iconX + 50, yPos + 10);
+            yPos += 120;
+
+            // Purple spell
+            ctx.fillStyle = '#AA44FF';
+            ctx.beginPath();
+            ctx.arc(iconX, yPos, iconSize / 2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillText('Make a wall', iconX + 50, yPos + 10);
+
+            // OK button
+            helpPopup.okButton.x = canvas.width / 2 - helpPopup.okButton.width / 2;
+            helpPopup.okButton.y = popupY + popupHeight - 90;
+
+            ctx.fillStyle = '#FF4444';
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 3;
+            ctx.fillRect(helpPopup.okButton.x, helpPopup.okButton.y, helpPopup.okButton.width, helpPopup.okButton.height);
+            ctx.strokeRect(helpPopup.okButton.x, helpPopup.okButton.y, helpPopup.okButton.width, helpPopup.okButton.height);
+
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = '36px Luckiest Guy, Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('OK', canvas.width / 2, helpPopup.okButton.y + helpPopup.okButton.height / 2 + 12);
         }
 
         function updateStartScreen() {
@@ -1671,12 +1797,45 @@
         canvas.addEventListener('mousedown', function (event) {
             const pos = getMousePos(event);
 
-            if (gameState === 'start' && startButton.visible) {
-                if (isPointInButton(pos.x, pos.y, startButton)) {
+            if (gameState === 'start') {
+                // Check if help popup is open
+                if (helpPopup.visible) {
+                    // Check if clicking OK button
+                    if (isPointInButton(pos.x, pos.y, helpPopup.okButton)) {
+                        helpPopup.visible = false;
+                        return;
+                    }
+
+                    // Check if clicking outside popup (close it)
+                    const popupWidth = canvas.width * 0.8;
+                    const popupHeight = canvas.height * 0.8;
+                    const popupX = (canvas.width - popupWidth) / 2;
+                    const popupY = (canvas.height - popupHeight) / 2;
+
+                    if (pos.x < popupX || pos.x > popupX + popupWidth ||
+                        pos.y < popupY || pos.y > popupY + popupHeight) {
+                        helpPopup.visible = false;
+                        return;
+                    }
+
+                    // Click inside popup but not on button - do nothing
+                    return;
+                }
+
+                // Check if clicking PLAY button
+                if (startButton.visible && isPointInButton(pos.x, pos.y, startButton)) {
                     startGame();
                     startShipSeaRocking();
                     return;
                 }
+
+                // Check if clicking HELP button
+                if (helpButton.visible && isPointInButton(pos.x, pos.y, helpButton)) {
+                    helpPopup.visible = true;
+                    return;
+                }
+
+                return;
             }
 
             if (gameState === 'intermission' && intermissionButton.visible) {
@@ -1780,12 +1939,45 @@
             event.preventDefault();
             const pos = getTouchPos(event);
 
-            if (gameState === 'start' && startButton.visible) {
-                if (isPointInButton(pos.x, pos.y, startButton)) {
+            if (gameState === 'start') {
+                // Check if help popup is open
+                if (helpPopup.visible) {
+                    // Check if clicking OK button
+                    if (isPointInButton(pos.x, pos.y, helpPopup.okButton)) {
+                        helpPopup.visible = false;
+                        return;
+                    }
+
+                    // Check if clicking outside popup (close it)
+                    const popupWidth = canvas.width * 0.8;
+                    const popupHeight = canvas.height * 0.8;
+                    const popupX = (canvas.width - popupWidth) / 2;
+                    const popupY = (canvas.height - popupHeight) / 2;
+
+                    if (pos.x < popupX || pos.x > popupX + popupWidth ||
+                        pos.y < popupY || pos.y > popupY + popupHeight) {
+                        helpPopup.visible = false;
+                        return;
+                    }
+
+                    // Click inside popup but not on button - do nothing
+                    return;
+                }
+
+                // Check if clicking PLAY button
+                if (startButton.visible && isPointInButton(pos.x, pos.y, startButton)) {
                     startGame();
                     startShipSeaRocking();
                     return;
                 }
+
+                // Check if clicking HELP button
+                if (helpButton.visible && isPointInButton(pos.x, pos.y, helpButton)) {
+                    helpPopup.visible = true;
+                    return;
+                }
+
+                return;
             }
 
             if (gameState === 'intermission' && intermissionButton.visible) {
