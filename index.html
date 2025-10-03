@@ -783,7 +783,7 @@
 
             update() {
                 const now = performance.now();
-                const deltaTime = now - this.lastUpdateTime;
+                const deltaTime = Math.min(now - this.lastUpdateTime, 100); // Cap at 100ms to prevent huge jumps when tabbing back
                 this.lastUpdateTime = now;
 
                 const dt = deltaTime / 1000;
@@ -1663,22 +1663,18 @@
             // Semi-transparent overlay
             ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
-
             // Popup box (80% of screen)
             const popupWidth = canvas.width * 0.8;
             const popupHeight = canvas.height * 0.8;
             const popupX = (canvas.width - popupWidth) / 2;
             const popupY = (canvas.height - popupHeight) / 2;
-
             ctx.fillStyle = '#2c3e50';
             ctx.strokeStyle = '#fff';
             ctx.lineWidth = 4;
             ctx.fillRect(popupX, popupY, popupWidth, popupHeight);
             ctx.strokeRect(popupX, popupY, popupWidth, popupHeight);
-
             // Content
             ctx.textAlign = 'center';
-
             // Title in gold (25% bigger, try one line)
             ctx.fillStyle = '#FFD700';
             ctx.strokeStyle = '#000000';
@@ -1688,17 +1684,16 @@
             ctx.strokeText('LEAD PENGUS FROM IGLOO TO SHIP', canvas.width / 2, yPos);
             ctx.fillText('LEAD PENGUS FROM IGLOO TO SHIP', canvas.width / 2, yPos);
             yPos += 120;
-
             ctx.strokeStyle = 'transparent';
             ctx.fillStyle = '#FFFFFF';
             ctx.font = '34px Luckiest Guy, Arial';
             ctx.fillText('Your spells:', canvas.width / 2, yPos);
             yPos += 120;
-
-            // Spell icons and descriptions (25% bigger)
+            // Spell icons and descriptions (20% bigger circles)
             ctx.font = '30px Luckiest Guy, Arial';
-            const iconSize = 60;
+            const iconSize = 72; // 20% bigger than 60
             const iconX = canvas.width / 2 - 240;
+            const textOffset = 80; // More gap between icon and text
 
             // Blue spell
             ctx.fillStyle = '#0066FF';
@@ -1707,36 +1702,61 @@
             ctx.fill();
             ctx.fillStyle = '#FFFFFF';
             ctx.textAlign = 'left';
-            ctx.fillText('Draw bridges and ramps', iconX + 50, yPos + 10);
+            ctx.fillText('Draw bridges and ramps', iconX + textOffset, yPos + 10);
             yPos += 120;
-
             // Red spell
             ctx.fillStyle = '#FF4444';
             ctx.beginPath();
             ctx.arc(iconX, yPos, iconSize / 2, 0, Math.PI * 2);
             ctx.fill();
             ctx.fillStyle = '#FFFFFF';
-            ctx.fillText('Blow up the terrain', iconX + 50, yPos + 10);
+            ctx.fillText('Blow up the terrain', iconX + textOffset, yPos + 10);
             yPos += 120;
-
             // Purple spell
             ctx.fillStyle = '#AA44FF';
             ctx.beginPath();
             ctx.arc(iconX, yPos, iconSize / 2, 0, Math.PI * 2);
             ctx.fill();
             ctx.fillStyle = '#FFFFFF';
-            ctx.fillText('Make a wall', iconX + 50, yPos + 10);
+            ctx.fillText('Make a wall', iconX + textOffset, yPos + 10);
+            yPos += 120;
+
+            // Speed button (bigger and in pressed state)
+            const buttonWidth = 90;
+            const buttonHeight = 60;
+            ctx.fillStyle = '#4CAF50';
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.fillRect(iconX - buttonWidth / 2, yPos - buttonHeight / 2, buttonWidth, buttonHeight);
+            ctx.strokeRect(iconX - buttonWidth / 2, yPos - buttonHeight / 2, buttonWidth, buttonHeight);
+
+            // Three gold arrows
+            ctx.fillStyle = '#FFD700';
+            ctx.font = '32px Luckiest Guy, Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            const arrowSpacing = 25;
+            const totalWidth = arrowSpacing * 2;
+            const startX = iconX - totalWidth / 2;
+
+            for (let i = 0; i < 3; i++) {
+                ctx.fillText('>', startX + i * arrowSpacing, yPos + 5);
+            }
+
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = '30px Luckiest Guy, Arial';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'alphabetic';
+            ctx.fillText('Speed up game', iconX + textOffset, yPos + 10);
 
             // OK button
             helpPopup.okButton.x = canvas.width / 2 - helpPopup.okButton.width / 2;
             helpPopup.okButton.y = popupY + popupHeight - 90;
-
             ctx.fillStyle = '#FF4444';
             ctx.strokeStyle = '#fff';
             ctx.lineWidth = 3;
             ctx.fillRect(helpPopup.okButton.x, helpPopup.okButton.y, helpPopup.okButton.width, helpPopup.okButton.height);
             ctx.strokeRect(helpPopup.okButton.x, helpPopup.okButton.y, helpPopup.okButton.width, helpPopup.okButton.height);
-
             ctx.fillStyle = '#FFFFFF';
             ctx.font = '36px Luckiest Guy, Arial';
             ctx.textAlign = 'center';
