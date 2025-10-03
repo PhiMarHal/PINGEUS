@@ -3,15 +3,14 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lemmings Game</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Pingeus</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Luckiest+Guy&display=swap');
 
         body {
             font-family: 'Luckiest Guy', Arial, sans-serif;
             margin: 0;
-            padding: 0;
             background-color: #2c3e50;
             color: white;
             overflow: hidden;
@@ -20,13 +19,17 @@
             align-items: center;
             width: 100vw;
             height: 100vh;
+            box-sizing: border-box;
+            overscroll-behavior: none;
+            -webkit-user-select: none;
+            user-select: none;
         }
 
         canvas {
             border: 2px solid #34495e;
             background-color: #87CEEB;
-            max-width: min(96vw, calc(96vh * 0.667));
-            max-height: min(96vh, calc(96vw * 1.5));
+            max-width: 100%;
+            max-height: 100%;
             width: auto;
             height: auto;
             display: block;
