@@ -478,7 +478,7 @@
             constructor(x, y) {
                 this.x = x;
                 this.y = y;
-                this.vx = 0.125;
+                this.vx = 18; // pixels per second (0.125 * 144 FPS = 18)
                 this.vy = 0;
                 this.width = 25;
                 this.height = 38;
@@ -492,8 +492,11 @@
                 this.animationInterval = 125; // ms between animation frames
             }
 
-            update() {
+            update(deltaTime = 16.67) {
                 if (!this.alive) return;
+
+                // Convert deltaTime to seconds for physics calculations
+                const dt = deltaTime / 1000;
 
                 const direction = this.vx > 0 ? 1 : -1;
                 const groundCheckX = this.x + this.width / 2 + (direction * this.width / 4);
@@ -507,11 +510,11 @@
                 }
 
                 if (this.swimming) {
-                    this.bobPhase += 0.1;
+                    this.bobPhase += 0.1 * (deltaTime / 16.67);
                     const bobOffset = Math.sin(this.bobPhase) * 5;
                     this.y = canvas.height - this.height + 10 + bobOffset;
 
-                    this.x += this.vx;
+                    this.x += this.vx * dt;
 
                     if (isSolidPixel(groundCheckX, feetY - 20)) {
                         this.swimming = false;
@@ -526,9 +529,11 @@
 
                     this.lastAction = "swimming";
                 } else if (!isSolidPixel(groundCheckX, feetY + 1)) {
-                    this.vy += 0.5;
-                    this.vy = Math.min(this.vy, 10);
-                    this.y += this.vy;
+                    // Gravity: 10368 pixels/second² (0.5 px/frame * 144 fps * 144 fps = 10368)
+                    // Terminal velocity: 1440 pixels/second (10 px/frame * 144 fps = 1440)
+                    this.vy += 10368 * dt;
+                    this.vy = Math.min(this.vy, 1440);
+                    this.y += this.vy * dt;
                     this.lastAction = "falling";
                     this.justSteppedUp = false;
                 } else {
@@ -545,7 +550,7 @@
                         this.justSteppedUp = false;
                     }
 
-                    this.attemptMovement();
+                    this.attemptMovement(dt);
                 }
 
                 if (this.x <= 0 || this.x >= canvas.width - this.width) {
@@ -573,10 +578,10 @@
                 }
             }
 
-            attemptMovement() {
+            attemptMovement(dt) {
                 const direction = this.vx > 0 ? 1 : -1;
                 const speed = Math.abs(this.vx);
-                const newX = this.x + direction * speed;
+                const newX = this.x + direction * speed * dt;
                 const bodyY = this.y + this.height / 2;
                 const feetY = this.y + this.height;
 
@@ -653,16 +658,22 @@
             constructor() {
                 this.x = -50;
                 this.y = canvas.height / 2 - 19;
-                this.vx = 0.125;
+                this.vx = 18; // pixels per second (matches Lemming)
                 this.width = 25;
                 this.height = 38;
                 this.animationFrame = 0;
                 this.lastAnimationTime = performance.now();
-                this.animationInterval = 125; // ms between animation frames (matches 144 FPS with speed 16)
+                this.animationInterval = 125; // ms between animation frames
+                this.lastUpdateTime = performance.now();
             }
 
             update() {
-                this.x += this.vx;
+                const now = performance.now();
+                const deltaTime = now - this.lastUpdateTime;
+                this.lastUpdateTime = now;
+
+                const dt = deltaTime / 1000;
+                this.x += this.vx * dt;
             }
 
             isOffScreen() {
@@ -1650,10 +1661,6 @@
                 lemmings.push(lemming);
                 lemmingsSpawned++;
 
-                if (lemmingsSpawned === 1) {
-                    console.log(`Level ${currentLevel} - First penguin animationSpeed: ${lemming.animationSpeed}`);
-                }
-
                 pulseIgloo();
 
                 console.log(`Spawned penguin ${lemmingsSpawned}/${maxLemmings} at entrance`);
@@ -2001,7 +2008,7 @@
 
             const updatesPerFrame = gameSpeed;
             for (let i = 0; i < updatesPerFrame; i++) {
-                lemmings.forEach(lemming => lemming.update());
+                lemmings.forEach(lemming => lemming.update(cappedDeltaTime));
                 updateParticles();
             }
 
