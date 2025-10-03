@@ -150,12 +150,21 @@
             visible: false
         };
 
+        let gameOverButton = {
+            x: 0,
+            y: 0,
+            width: 300,
+            height: 80,
+            visible: false
+        };
+
         // Jumping pudgies for intermission screen
         let jumpingPudgies = [];
 
         let groundPattern = null;
         let currentGroundTexture = 1;
         let currentOutlineColor = '#00AA00';
+        let currentSkyColor = '#87CEEB';
 
         // Music system
         const TOTAL_TRACKS = 20;
@@ -209,6 +218,7 @@
 
             setTimeout(() => {
                 if (musicEnabled && currentAudio) {
+                    currentAudio.volume = 0.7;
                     currentAudio.play().catch(err => console.log('Music play error:', err));
                     console.log(`Playing track ${formatTrackNumber(trackNumber)}`);
 
@@ -234,6 +244,7 @@
 
             currentAudio.addEventListener('canplaythrough', () => {
                 if (musicEnabled) {
+                    currentAudio.volume = 0.7;
                     currentAudio.play().catch(err => console.log('Music play error:', err));
                     console.log(`Playing first track ${formatTrackNumber(firstTrack)}`);
 
@@ -292,7 +303,8 @@
             pudgy_walk_4: new Image(),
             pudgy_walk_5: new Image(),
             pudgy_walk_6: new Image(),
-            ground_1: new Image()
+            ground_1: new Image(),
+            ground_2: new Image()
         };
 
         sprites.igloo.src = BASE_URL + 'igloo.png';
@@ -306,19 +318,37 @@
         sprites.pudgy_walk_5.src = BASE_URL + 'pudgy_walk_5.png';
         sprites.pudgy_walk_6.src = BASE_URL + 'pudgy_walk_6.png';
         sprites.ground_1.src = BASE_URL + 'ground_1.png';
+        sprites.ground_2.src = BASE_URL + 'ground_2.png';
 
         let spritesLoaded = 0;
-        const totalSprites = 11;
+        const totalSprites = 12;
 
         function onSpriteLoad() {
             spritesLoaded++;
             if (spritesLoaded === totalSprites) {
                 console.log('All sprites loaded, showing start screen');
-                groundPattern = terrainCtx.createPattern(sprites.ground_1, 'repeat');
-                console.log('Ground pattern created:', groundPattern);
+                updateTerrainVisuals();
 
                 requestAnimationFrame(gameLoop);
             }
+        }
+
+        function updateTerrainVisuals() {
+            // Cycle every 4 levels: 1-4 (ground_1), 5-8 (ground_2), 9-12 (ground_1), etc.
+            const levelCycle = Math.floor((currentLevel - 1) / 4) % 2;
+
+            if (levelCycle === 1) {
+                // Levels 5-8, 13-16, 21-24, etc.
+                groundPattern = terrainCtx.createPattern(sprites.ground_2, 'repeat');
+                currentOutlineColor = '#9933FF';
+                currentSkyColor = '#f9ced9';
+            } else {
+                // Levels 1-4, 9-12, 17-20, etc.
+                groundPattern = terrainCtx.createPattern(sprites.ground_1, 'repeat');
+                currentOutlineColor = '#00AA00';
+                currentSkyColor = '#87CEEB';
+            }
+            console.log('Ground pattern updated for level', currentLevel, 'cycle:', levelCycle);
         }
 
         sprites.igloo.onload = onSpriteLoad;
@@ -332,6 +362,7 @@
         sprites.pudgy_walk_5.onload = onSpriteLoad;
         sprites.pudgy_walk_6.onload = onSpriteLoad;
         sprites.ground_1.onload = onSpriteLoad;
+        sprites.ground_2.onload = onSpriteLoad;
 
         sprites.igloo.onerror = () => console.error('Failed to load igloo.png');
         sprites.ship.onerror = () => console.error('Failed to load ship.png');
@@ -344,6 +375,7 @@
         sprites.pudgy_walk_5.onerror = () => console.error('Failed to load pudgy_walk_5.png');
         sprites.pudgy_walk_6.onerror = () => console.error('Failed to load pudgy_walk_6.png');
         sprites.ground_1.onerror = () => console.error('Failed to load ground_1.png');
+        sprites.ground_2.onerror = () => console.error('Failed to load ground_2.png');
 
         function isSolidPixel(x, y) {
             x = Math.floor(x);
@@ -777,6 +809,8 @@
             generatePoints();
             terrainShapes = [];
 
+            updateTerrainVisuals();
+
             const bottomSafeZone = canvas.height * 0.98;
 
             for (let i = 0; i < points.length; i++) {
@@ -838,7 +872,7 @@
 
         function drawTerrainOnly() {
             collisionCtx.clearRect(0, 0, collisionCanvas.width, collisionCanvas.height);
-            terrainCtx.fillStyle = '#87CEEB';
+            terrainCtx.fillStyle = currentSkyColor;
             terrainCtx.fillRect(0, 0, terrainCanvas.width, terrainCanvas.height);
 
             terrainShapes.forEach(blobPoints => {
@@ -892,7 +926,7 @@
         }
 
         function drawStaticTerrain() {
-            ctx.fillStyle = '#87CEEB';
+            ctx.fillStyle = currentSkyColor;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.drawImage(terrainCanvas, 0, 0);
             drawSpawnPoints();
@@ -1582,6 +1616,40 @@
             startMusic();
         }
 
+        function restartGame() {
+            console.log('Restarting game from game over!');
+
+            // Reset all game state variables
+            lemmings = [];
+            drawnLines = [];
+            lemmingsSpawned = 0;
+            lemmingsSaved = 0;
+            maxLemmings = 40;
+            mana = 2000;
+            lastLevelBonus = 2000;
+            score = 0;
+            accumulatedTime = 0;
+            lastFrameTime = 0;
+            lastSpawnTime = 0;
+            currentLevel = 1;
+            speedButton.pressed = false;
+            gameSpeed = 1;
+            currentSpell = 'blue';
+            particles = [];
+            foamParticles = [];
+            gameOverButton.visible = false;
+
+            // Generate new terrain and start
+            generateTerrain();
+            gameStartTime = Date.now();
+            gameState = 'playing';
+            gameActive = true;
+            startShipSeaRocking();
+
+            // CRITICAL: Restart the game loop
+            requestAnimationFrame(gameLoop);
+        }
+
         canvas.addEventListener('mousedown', function (event) {
             const pos = getMousePos(event);
 
@@ -1596,6 +1664,13 @@
             if (gameState === 'intermission' && intermissionButton.visible) {
                 if (isPointInButton(pos.x, pos.y, intermissionButton)) {
                     startNextLevel();
+                    return;
+                }
+            }
+
+            if (gameState === 'gameover' && gameOverButton.visible) {
+                if (isPointInButton(pos.x, pos.y, gameOverButton)) {
+                    restartGame();
                     return;
                 }
             }
@@ -1698,6 +1773,13 @@
             if (gameState === 'intermission' && intermissionButton.visible) {
                 if (isPointInButton(pos.x, pos.y, intermissionButton)) {
                     startNextLevel();
+                    return;
+                }
+            }
+
+            if (gameState === 'gameover' && gameOverButton.visible) {
+                if (isPointInButton(pos.x, pos.y, gameOverButton)) {
+                    restartGame();
                     return;
                 }
             }
@@ -1874,17 +1956,31 @@
             ctx.lineWidth = 4;
             ctx.font = '60px Luckiest Guy, Arial';
             ctx.textAlign = 'center';
-            ctx.strokeText('TIME UP!', canvas.width / 2, canvas.height / 2 - 50);
-            ctx.fillText('TIME UP!', canvas.width / 2, canvas.height / 2 - 50);
+            ctx.strokeText('TIME UP!', canvas.width / 2, canvas.height / 2 - 100);
+            ctx.fillText('TIME UP!', canvas.width / 2, canvas.height / 2 - 100);
 
             ctx.fillStyle = '#FFFFFF';
             ctx.font = '36px Luckiest Guy, Arial';
-            ctx.strokeText(`Final Score: ${score}`, canvas.width / 2, canvas.height / 2 + 30);
-            ctx.fillText(`Final Score: ${score}`, canvas.width / 2, canvas.height / 2 + 30);
+            ctx.strokeText(`Final Score: ${score}`, canvas.width / 2, canvas.height / 2 - 20);
+            ctx.fillText(`Final Score: ${score}`, canvas.width / 2, canvas.height / 2 - 20);
 
             ctx.font = '28px Luckiest Guy, Arial';
-            ctx.strokeText(`Reached Level ${currentLevel}`, canvas.width / 2, canvas.height / 2 + 80);
-            ctx.fillText(`Reached Level ${currentLevel}`, canvas.width / 2, canvas.height / 2 + 80);
+            ctx.strokeText(`Reached Level ${currentLevel}`, canvas.width / 2, canvas.height / 2 + 40);
+            ctx.fillText(`Reached Level ${currentLevel}`, canvas.width / 2, canvas.height / 2 + 40);
+
+            // Draw play again button
+            gameOverButton.x = canvas.width / 2 - gameOverButton.width / 2;
+            gameOverButton.y = canvas.height / 2 + 100;
+
+            ctx.fillStyle = '#4CAF50';
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 3;
+            ctx.fillRect(gameOverButton.x, gameOverButton.y, gameOverButton.width, gameOverButton.height);
+            ctx.strokeRect(gameOverButton.x, gameOverButton.y, gameOverButton.width, gameOverButton.height);
+
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = '48px Luckiest Guy, Arial';
+            ctx.fillText('PLAY', canvas.width / 2, gameOverButton.y + gameOverButton.height / 2 + 15);
         }
 
         function drawUI() {
@@ -2114,6 +2210,7 @@
                 } else {
                     console.log(`Timer expired with 0 penguins saved - GAME OVER`);
                     gameState = 'gameover';
+                    gameOverButton.visible = true;
                     setTimeout(() => {
                         drawGame();
                     }, 1000);
