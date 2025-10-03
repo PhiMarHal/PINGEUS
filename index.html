@@ -11,6 +11,7 @@
         body {
             font-family: 'Luckiest Guy', Arial, sans-serif;
             margin: 0;
+            padding: 0;
             background-color: #2c3e50;
             color: white;
             overflow: hidden;
@@ -69,8 +70,8 @@
         let lemmingsSpawned = 0;
         let lemmingsSaved = 0;
 
-        let mana = 1000;
-        let lastLevelBonus = 1000;
+        let mana = 2000;
+        let lastLevelBonus = 2000;
         let score = 0;
 
         let levelTime = 240000;
@@ -2015,7 +2016,7 @@
             gameState = 'intermission';
             gameActive = false;
 
-            levelCompleteBonus = Math.ceil(lastLevelBonus * 0.9);
+            levelCompleteBonus = Math.ceil(lastLevelBonus * 0.8);
             mana += levelCompleteBonus;
             lastLevelBonus = levelCompleteBonus;
 
