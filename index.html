@@ -54,7 +54,7 @@
         const collisionCanvas = document.createElement('canvas');
         collisionCanvas.width = canvas.width;
         collisionCanvas.height = canvas.height;
-        const collisionCtx = collisionCanvas.getContext('2d');
+        const collisionCtx = collisionCanvas.getContext('2d', { willReadFrequently: true });
 
         const terrainCanvas = document.createElement('canvas');
         terrainCanvas.width = canvas.width;
@@ -87,10 +87,11 @@
         let currentHint = '';
 
         const gameHints = [
-            "Finishing a level gives you extra mana, but you get less and less as the game goes on. Use your spells with care!",
-            "Penguins laugh at gravity.",
-            "Each penguin saved gives you +1 point. Do your best to save them all. Once they're gone, they're gone.",
-            "Red and purple spells cost 40 mana each. The blue spell uses mana according to length."
+            "Ending a level gives you mana. Earlier levels give more mana.",
+            "Penguins laugh at gravity. No matter how high the fall.",
+            "Each saved penguin is +1 point. Do your best to save them all!",
+            "Red and purple spells cost 40 mana. Blue uses mana per length.",
+            "Blue spells are mana efficiency. Keep red and purple for emergencies."
         ];
 
         let gameSpeed = 1;
@@ -375,7 +376,7 @@
             } else {
                 // Levels 13-16, 29-32, 45-48, etc.
                 groundPattern = terrainCtx.createPattern(sprites.ground_4, 'repeat');
-                currentOutlineColor = '#2d5016';
+                currentOutlineColor = '#A0826D';
                 currentSkyColor = '#c8fc8c';
             }
         }
@@ -1503,13 +1504,13 @@
                 return;
             }
 
-            const radius = 25;
+            const radius = 40;
             const numPoints = 12 + Math.floor(Math.random() * 8);
             const explosionPoints = [];
 
             for (let i = 0; i < numPoints; i++) {
                 const angle = (i / numPoints) * Math.PI * 2;
-                const radiusVariation = 0.6 + Math.random() * 0.8;
+                const radiusVariation = 0.6 + Math.random() * 0.2;
                 const finalRadius = radius * radiusVariation;
                 const angleNoise = (Math.random() - 0.5) * 0.3;
                 const finalAngle = angle + angleNoise;
@@ -2094,27 +2095,19 @@
             ctx.strokeStyle = '#000000';
             ctx.lineWidth = 3;
             ctx.font = '24px Luckiest Guy, Arial';
-            const maxWidth = canvas.width - 100;
-            const lineHeight = 32;
-            const words = currentHint.split(' ');
-            let line = '';
+            const lineHeight = 36;
             let y = canvas.height / 2 + 50;
 
-            for (let i = 0; i < words.length; i++) {
-                const testLine = line + words[i] + ' ';
-                const metrics = ctx.measureText(testLine);
+            // Split by sentences (periods) and display each on its own line
+            const sentences = currentHint.split('. ').filter(s => s.length > 0);
 
-                if (metrics.width > maxWidth && i > 0) {
-                    ctx.strokeText(line, canvas.width / 2, y);
-                    ctx.fillText(line, canvas.width / 2, y);
-                    line = words[i] + ' ';
-                    y += lineHeight;
-                } else {
-                    line = testLine;
-                }
-            }
-            ctx.strokeText(line, canvas.width / 2, y);
-            ctx.fillText(line, canvas.width / 2, y);
+            sentences.forEach((sentence, index) => {
+                // Add period back if it's not the last sentence
+                const displayText = (index < sentences.length - 1 && !sentence.endsWith('.')) ? sentence + '.' : sentence;
+                ctx.strokeText(displayText, canvas.width / 2, y);
+                ctx.fillText(displayText, canvas.width / 2, y);
+                y += lineHeight;
+            });
 
             intermissionButton.x = canvas.width / 2 - intermissionButton.width / 2;
             intermissionButton.y = canvas.height - 200;
