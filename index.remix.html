@@ -6,7 +6,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Pingeus</title>
     <link rel="icon" type="image/png" href="https://pingeus.loiyaa.com/assets/favicon.png">
-    <script src="https://cdn.jsdelivr.net/npm/@farcade/game-sdk@latest/dist/index.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Luckiest+Guy&display=swap');
 
@@ -26,10 +25,10 @@
             overscroll-behavior: none;
             -webkit-user-select: none;
             user-select: none;
+            position: relative;
         }
 
-        canvas {
-            border: 2px solid #34495e;
+        #terrainCanvas {
             background-color: #87CEEB;
             max-width: 100%;
             max-height: 100%;
@@ -37,6 +36,8 @@
             height: auto;
             display: block;
             touch-action: none;
+            position: relative;
+            z-index: 100;
         }
     </style>
 </head>
@@ -53,7 +54,7 @@
         const collisionCanvas = document.createElement('canvas');
         collisionCanvas.width = canvas.width;
         collisionCanvas.height = canvas.height;
-        const collisionCtx = collisionCanvas.getContext('2d');
+        const collisionCtx = collisionCanvas.getContext('2d', { willReadFrequently: true });
 
         const terrainCanvas = document.createElement('canvas');
         terrainCanvas.width = canvas.width;
@@ -86,27 +87,32 @@
         let currentHint = '';
 
         const gameHints = [
-            "Finishing a level gives you extra mana, but you get less and less as the game goes on. Use your spells with care!",
-            "Penguins laugh at gravity.",
-            "Each penguin saved gives you +1 point. Do your best to save them all. Once they're gone, they're gone.",
-            "Red and purple spells cost 40 mana each. The blue spell uses mana according to length."
+            "Ending a level gives you mana. Earlier levels give more mana.",
+            "Penguins laugh at gravity. No matter how high the fall.",
+            "Each saved penguin is +1 point. Do your best to save them all!",
+            "Red and purple spells cost 40 mana. Blue uses mana per length.",
+            "Blue spells are mana efficiency. Keep red and purple for emergencies."
         ];
 
         let gameSpeed = 1;
         let speedButton = {
-            x: canvas.width - 120,
-            y: canvas.height - 80,
-            width: 90,
-            height: 60,
+            width: 120,  // scaled up from 90
+            height: 80,  // scaled up from 60
             pressed: false,
-            animationFrame: 0
+            animationFrame: 0,
+            get x() { return canvas.width - this.width - 40; }, // margin from right
+            get y() { return canvas.height - this.height - 30; }
         };
 
         let currentSpell = 'blue';
+        const buttonRadius = 48;
+        const buttonSpacing = 140; // distance between button centers
+        const bottomY = canvas.height - 70; // vertical alignment
+
         let spellButtons = [
-            { spell: 'blue', x: 60, y: canvas.height - 50, radius: 35, color: '#0066FF', name: 'Ramp' },
-            { spell: 'red', x: 160, y: canvas.height - 50, radius: 35, color: '#FF4444', name: 'Bomb' },
-            { spell: 'purple', x: 260, y: canvas.height - 50, radius: 35, color: '#AA44FF', name: 'Wall' }
+            { spell: 'red', x: 260, y: bottomY, radius: buttonRadius, color: '#FF4444', name: 'Bomb' },
+            { spell: 'blue', x: 260 + buttonSpacing, y: bottomY, radius: buttonRadius, color: '#0066FF', name: 'Ramp' },
+            { spell: 'purple', x: 260 + buttonSpacing * 2, y: bottomY, radius: buttonRadius, color: '#AA44FF', name: 'Wall' }
         ];
 
         let isDrawing = false;
@@ -121,18 +127,12 @@
         let scoreAnimation = { active: false, scale: 1, startTime: 0 };
         let manaAnimation = { active: false, shake: 0, startTime: 0 };
 
-        // Sea animation state
         let seaWaveOffset = 0;
-
-        // Ship sea rocking animation state
         let shipRotation = 0;
         let shipBobOffset = 0;
-
-        // Igloo and exit pulse state
         let iglooScale = 1;
         let exitScale = 1;
 
-        // Start screen
         let startScreenPenguins = [];
         let lastStartPenguinSpawn = 0;
         const START_PENGUIN_INTERVAL = 2000;
@@ -178,7 +178,6 @@
             visible: false
         };
 
-        // Jumping pudgies for intermission screen
         let jumpingPudgies = [];
 
         let groundPattern = null;
@@ -186,7 +185,6 @@
         let currentOutlineColor = '#00AA00';
         let currentSkyColor = '#87CEEB';
 
-        // Music system
         const TOTAL_TRACKS = 20;
         let musicPlaylist = [];
         let currentTrackIndex = 0;
@@ -207,7 +205,6 @@
         function initMusicPlaylist() {
             const tracks = Array.from({ length: TOTAL_TRACKS }, (_, i) => i + 1);
             musicPlaylist = shuffleArray(tracks);
-            console.log('Music playlist shuffled:', musicPlaylist);
         }
 
         function formatTrackNumber(num) {
@@ -219,7 +216,6 @@
             const trackNum = formatTrackNumber(trackNumber);
             audio.src = BASE_URL + `track_${trackNum}.mp3`;
             audio.preload = 'auto';
-            console.log(`Loading track ${trackNum}`);
             return audio;
         }
 
@@ -240,7 +236,6 @@
                 if (musicEnabled && currentAudio) {
                     currentAudio.volume = 0.7;
                     currentAudio.play().catch(err => console.log('Music play error:', err));
-                    console.log(`Playing track ${formatTrackNumber(trackNumber)}`);
 
                     nextTrackPreloadTimer = setTimeout(() => {
                         const nextTrackIndex = (currentTrackIndex + 1) % musicPlaylist.length;
@@ -266,7 +261,6 @@
                 if (musicEnabled) {
                     currentAudio.volume = 0.7;
                     currentAudio.play().catch(err => console.log('Music play error:', err));
-                    console.log(`Playing first track ${formatTrackNumber(firstTrack)}`);
 
                     nextTrackPreloadTimer = setTimeout(() => {
                         const nextTrackIndex = (currentTrackIndex + 1) % musicPlaylist.length;
@@ -284,14 +278,12 @@
         function pauseMusic() {
             if (currentAudio && !currentAudio.paused) {
                 currentAudio.pause();
-                console.log('Music paused');
             }
         }
 
         function resumeMusic() {
             if (currentAudio && currentAudio.paused) {
                 currentAudio.play().catch(err => console.log('Music play error:', err));
-                console.log('Music resumed');
             }
         }
 
@@ -300,7 +292,6 @@
                 pauseMusic();
             } else {
                 resumeMusic();
-                // Reset start screen spawn timer to prevent immediate spawning
                 if (gameState === 'start') {
                     lastStartPenguinSpawn = performance.now();
                 }
@@ -315,7 +306,6 @@
             resumeMusic();
         });
 
-        // Load sprites
         const sprites = {
             igloo: new Image(),
             ship: new Image(),
@@ -329,7 +319,8 @@
             pudgy_walk_6: new Image(),
             ground_1: new Image(),
             ground_2: new Image(),
-            ground_3: new Image()
+            ground_3: new Image(),
+            ground_4: new Image()
         };
 
         sprites.igloo.src = BASE_URL + 'igloo.png';
@@ -345,47 +336,53 @@
         sprites.ground_1.src = BASE_URL + 'ground_1.png';
         sprites.ground_2.src = BASE_URL + 'ground_2.png';
         sprites.ground_3.src = BASE_URL + 'ground_3.png';
+        sprites.ground_4.src = BASE_URL + 'ground_4.png';
 
         let spritesLoaded = 0;
-        const totalSprites = 13;
+        const totalSprites = 14;
 
         function onSpriteLoad() {
             spritesLoaded++;
             if (spritesLoaded === totalSprites) {
-                console.log('All sprites loaded, showing start screen');
                 updateTerrainVisuals();
 
-                // Farcade SDK: Signal that the game is fully loaded and ready to play
                 if (window.FarcadeSDK) {
                     window.FarcadeSDK.singlePlayer.actions.ready();
-                    console.log('Farcade SDK: Game ready signal sent.');
                 }
+
+                // Initialize letterboxing AFTER game is set up
+                setTimeout(() => {
+                    LPatternBackgroundSystem.init();
+                }, 100);
 
                 requestAnimationFrame(gameLoop);
             }
         }
 
         function updateTerrainVisuals() {
-            // Cycle every 4 levels through 3 textures: 1-4 (ground_1), 5-8 (ground_2), 9-12 (ground_3), then repeat
-            const levelCycle = Math.floor((currentLevel - 1) / 4) % 3;
+            const levelCycle = Math.floor((currentLevel - 1) / 4) % 4;
 
             if (levelCycle === 0) {
-                // Levels 1-4, 13-16, 25-28, etc.
+                // Levels 1-4, 17-20, 33-36, etc.
                 groundPattern = terrainCtx.createPattern(sprites.ground_1, 'repeat');
                 currentOutlineColor = '#00AA00';
                 currentSkyColor = '#87CEEB';
             } else if (levelCycle === 1) {
-                // Levels 5-8, 17-20, 29-32, etc.
+                // Levels 5-8, 21-24, 37-40, etc.
                 groundPattern = terrainCtx.createPattern(sprites.ground_2, 'repeat');
                 currentOutlineColor = '#9933FF';
                 currentSkyColor = '#f9ced9';
-            } else {
-                // Levels 9-12, 21-24, 33-36, etc.
+            } else if (levelCycle === 2) {
+                // Levels 9-12, 25-28, 41-44, etc.
                 groundPattern = terrainCtx.createPattern(sprites.ground_3, 'repeat');
                 currentOutlineColor = '#5B9BD5';
-                currentSkyColor = '#D4E7F5';
+                currentSkyColor = '#4716b7';
+            } else {
+                // Levels 13-16, 29-32, 45-48, etc.
+                groundPattern = terrainCtx.createPattern(sprites.ground_4, 'repeat');
+                currentOutlineColor = '#A0826D';
+                currentSkyColor = '#c8fc8c';
             }
-            console.log('Ground pattern updated for level', currentLevel, 'cycle:', levelCycle);
         }
 
         sprites.igloo.onload = onSpriteLoad;
@@ -401,6 +398,7 @@
         sprites.ground_1.onload = onSpriteLoad;
         sprites.ground_2.onload = onSpriteLoad;
         sprites.ground_3.onload = onSpriteLoad;
+        sprites.ground_4.onload = onSpriteLoad;
 
         sprites.igloo.onerror = () => console.error('Failed to load igloo.png');
         sprites.ship.onerror = () => console.error('Failed to load ship.png');
@@ -415,6 +413,7 @@
         sprites.ground_1.onerror = () => console.error('Failed to load ground_1.png');
         sprites.ground_2.onerror = () => console.error('Failed to load ground_2.png');
         sprites.ground_3.onerror = () => console.error('Failed to load ground_3.png');
+        sprites.ground_4.onerror = () => console.error('Failed to load ground_4.png');
 
         function isSolidPixel(x, y) {
             x = Math.floor(x);
@@ -557,7 +556,7 @@
             constructor(x, y) {
                 this.x = x;
                 this.y = y;
-                this.vx = 18; // pixels per second (0.125 * 144 FPS = 18)
+                this.vx = 18;
                 this.vy = 0;
                 this.width = 25;
                 this.height = 38;
@@ -568,13 +567,12 @@
                 this.bobPhase = Math.random() * Math.PI * 2;
                 this.animationFrame = 0;
                 this.lastAnimationTime = performance.now();
-                this.animationInterval = 125; // ms between animation frames
+                this.animationInterval = 125;
             }
 
             update(deltaTime = 16.67) {
                 if (!this.alive) return;
 
-                // Convert deltaTime to seconds for physics calculations
                 const dt = deltaTime / 1000;
 
                 const direction = this.vx > 0 ? 1 : -1;
@@ -608,17 +606,13 @@
 
                     this.lastAction = "swimming";
                 } else if (!isSolidPixel(groundCheckX, feetY + 1)) {
-                    // Gravity: 10368 pixels/second² (0.5 px/frame * 144 fps * 144 fps = 10368)
-                    // Terminal velocity: 1440 pixels/second (10 px/frame * 144 fps = 1440)
                     this.vy += 10368 * dt;
                     this.vy = Math.min(this.vy, 1440);
 
-                    // Calculate fall distance and check for collisions along the path
                     const fallDistance = this.vy * dt;
                     const oldY = this.y;
                     let landed = false;
 
-                    // Check in steps of 2 pixels to avoid tunneling through thin platforms
                     const steps = Math.ceil(fallDistance / 2);
                     const stepSize = fallDistance / steps;
 
@@ -627,12 +621,10 @@
                         const checkFeetY = checkY + this.height;
 
                         if (isSolidPixel(groundCheckX, checkFeetY)) {
-                            // Hit ground during fall, snap to surface
                             this.y = checkY;
                             this.vy = 0;
                             landed = true;
 
-                            // Snap to exact surface
                             for (let checkY2 = checkFeetY - 3; checkY2 <= checkFeetY + 3; checkY2++) {
                                 if (isSolidPixel(groundCheckX, checkY2)) {
                                     this.y = checkY2 - this.height;
@@ -685,8 +677,6 @@
                     scoreAnimation.startTime = Date.now();
 
                     pulseExit();
-
-                    console.log(`Penguin saved! Total: ${lemmingsSaved}/${lemmingsSpawned}, Score: ${score}`);
                     return;
                 }
             }
@@ -735,7 +725,6 @@
                 const offsetX = (spriteWidth - this.width) / 2;
                 const offsetY = (spriteHeight - this.height) / 2;
 
-                // Update animation based on elapsed time
                 const now = performance.now();
                 if (now - this.lastAnimationTime >= this.animationInterval) {
                     this.animationFrame++;
@@ -771,18 +760,18 @@
             constructor() {
                 this.x = -50;
                 this.y = canvas.height / 2 - 19;
-                this.vx = 18; // pixels per second (matches Lemming)
+                this.vx = 18;
                 this.width = 25;
                 this.height = 38;
                 this.animationFrame = 0;
                 this.lastAnimationTime = performance.now();
-                this.animationInterval = 125; // ms between animation frames
+                this.animationInterval = 125;
                 this.lastUpdateTime = performance.now();
             }
 
             update() {
                 const now = performance.now();
-                const deltaTime = Math.min(now - this.lastUpdateTime, 100); // Cap at 100ms to prevent huge jumps when tabbing back
+                const deltaTime = Math.min(now - this.lastUpdateTime, 100);
                 this.lastUpdateTime = now;
 
                 const dt = deltaTime / 1000;
@@ -801,7 +790,6 @@
                 const offsetX = (spriteWidth - this.width) / 2;
                 const offsetY = (spriteHeight - this.height) / 2;
 
-                // Update animation based on elapsed time
                 const now = performance.now();
                 if (now - this.lastAnimationTime >= this.animationInterval) {
                     this.animationFrame++;
@@ -1063,6 +1051,10 @@
             const button = speedButton;
 
             ctx.save();
+
+            // Always semi-transparent
+            ctx.globalAlpha = 0.8;
+
             ctx.fillStyle = button.pressed ? '#4CAF50' : '#333';
             ctx.strokeStyle = '#fff';
             ctx.lineWidth = 2;
@@ -1084,11 +1076,7 @@
                 const startX = button.x + button.width / 2 - totalWidth / 2;
 
                 for (let i = 0; i < 3; i++) {
-                    if (i <= cycle) {
-                        ctx.fillStyle = '#FFD700';
-                    } else {
-                        ctx.fillStyle = '#666';
-                    }
+                    ctx.fillStyle = i <= cycle ? '#FFD700' : '#666';
                     ctx.fillText('>', startX + i * spacing, arrowY);
                 }
 
@@ -1102,15 +1090,20 @@
             ctx.restore();
         }
 
+
         function drawSpellButtons() {
             spellButtons.forEach(button => {
                 ctx.save();
+
+                // Use a softer opacity difference
+                ctx.globalAlpha = currentSpell === button.spell ? 0.8 : 0.5;
 
                 ctx.fillStyle = button.color;
                 ctx.beginPath();
                 ctx.arc(button.x, button.y, button.radius, 0, 2 * Math.PI);
                 ctx.fill();
 
+                // Keep a visual highlight for the selected one
                 ctx.strokeStyle = currentSpell === button.spell ? '#FFD700' : '#fff';
                 ctx.lineWidth = currentSpell === button.spell ? 4 : 2;
                 ctx.stroke();
@@ -1118,6 +1111,7 @@
                 ctx.restore();
             });
         }
+
 
         function isPointInButton(x, y, button) {
             return x >= button.x && x <= button.x + button.width &&
@@ -1316,12 +1310,10 @@
         function updateSea(deltaTime) {
             seaWaveOffset += 0.002 * deltaTime;
 
-            // Spawn foam particles occasionally
             if (Math.random() < 0.3) {
                 const seaY = canvas.height - 18;
                 const x = Math.random() * canvas.width;
 
-                // Calculate wave height at this x position
                 const wave1 = Math.sin(x * 0.02 + seaWaveOffset) * 2;
                 const wave2 = Math.sin(x * 0.03 - seaWaveOffset * 1.5) * 1.5;
                 const waveY = seaY + wave1 + wave2;
@@ -1337,7 +1329,6 @@
                 });
             }
 
-            // Update foam particles
             foamParticles.forEach(p => {
                 p.x += p.vx;
                 p.y += p.vy;
@@ -1352,15 +1343,12 @@
 
             ctx.save();
 
-            // Draw the sea as a filled wave shape
             ctx.fillStyle = 'rgba(30, 100, 180, 0.85)';
             ctx.beginPath();
 
-            // Start from bottom-left
             ctx.moveTo(0, canvas.height);
             ctx.lineTo(0, seaY);
 
-            // Draw the wavy top edge
             for (let x = 0; x <= canvas.width; x += 2) {
                 const wave1 = Math.sin(x * 0.02 + seaWaveOffset) * 2;
                 const wave2 = Math.sin(x * 0.03 - seaWaveOffset * 1.5) * 1.5;
@@ -1369,12 +1357,10 @@
                 ctx.lineTo(x, y);
             }
 
-            // Complete the shape back to bottom
             ctx.lineTo(canvas.width, canvas.height);
             ctx.closePath();
             ctx.fill();
 
-            // Add a lighter wave overlay for depth
             ctx.fillStyle = 'rgba(60, 140, 220, 0.4)';
             ctx.beginPath();
             ctx.moveTo(0, canvas.height);
@@ -1391,7 +1377,6 @@
             ctx.closePath();
             ctx.fill();
 
-            // Draw foam particles
             foamParticles.forEach(p => {
                 ctx.globalAlpha = p.life * 0.9;
                 ctx.fillStyle = '#FFFFFF';
@@ -1500,7 +1485,6 @@
             createSpellParticles(x, y, 'purple');
 
             if (mana < wallCost) {
-                console.log('Not enough mana for purple wall! Need 40, have ' + mana);
                 return;
             }
 
@@ -1519,8 +1503,6 @@
 
             manaAnimation.active = true;
             manaAnimation.startTime = Date.now();
-
-            console.log(`Placed purple wall, -${wallCost} mana (${mana} remaining)`);
         }
 
         function createExplosion(x, y) {
@@ -1529,17 +1511,16 @@
             createSpellParticles(x, y, 'red');
 
             if (mana < explosionCost) {
-                console.log('Not enough mana for explosion! Need 40, have ' + mana);
                 return;
             }
 
-            const radius = 25;
+            const radius = 40;
             const numPoints = 12 + Math.floor(Math.random() * 8);
             const explosionPoints = [];
 
             for (let i = 0; i < numPoints; i++) {
                 const angle = (i / numPoints) * Math.PI * 2;
-                const radiusVariation = 0.6 + Math.random() * 0.8;
+                const radiusVariation = 0.6 + Math.random() * 0.2;
                 const finalRadius = radius * radiusVariation;
                 const angleNoise = (Math.random() - 0.5) * 0.3;
                 const finalAngle = angle + angleNoise;
@@ -1556,8 +1537,6 @@
 
             manaAnimation.active = true;
             manaAnimation.startTime = Date.now();
-
-            console.log(`Created explosion, -${explosionCost} mana (${mana} remaining)`);
         }
 
         function applyExplosionHole(x, y, explosionPoints) {
@@ -1624,7 +1603,6 @@
             ctx.strokeText('PINGEUS', canvas.width / 2, 150);
             ctx.fillText('PINGEUS', canvas.width / 2, 150);
 
-            // Draw PLAY button (moved up)
             startButton.x = canvas.width / 2 - startButton.width / 2;
             startButton.y = canvas.height - 300;
 
@@ -1638,7 +1616,6 @@
             ctx.font = '48px Luckiest Guy, Arial';
             ctx.fillText('PLAY', canvas.width / 2, startButton.y + startButton.height / 2 + 15);
 
-            // Draw HELP button (moved further down)
             helpButton.x = canvas.width / 2 - helpButton.width / 2;
             helpButton.y = canvas.height - 180;
 
@@ -1652,17 +1629,15 @@
             ctx.font = '36px Luckiest Guy, Arial';
             ctx.fillText('HELP', canvas.width / 2, helpButton.y + helpButton.height / 2 + 12);
 
-            // Draw help popup if visible
             if (helpPopup.visible) {
                 drawHelpPopup();
             }
         }
 
         function drawHelpPopup() {
-            // Semi-transparent overlay
             ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
-            // Popup box (80% of screen)
+
             const popupWidth = canvas.width * 0.8;
             const popupHeight = canvas.height * 0.8;
             const popupX = (canvas.width - popupWidth) / 2;
@@ -1672,9 +1647,9 @@
             ctx.lineWidth = 4;
             ctx.fillRect(popupX, popupY, popupWidth, popupHeight);
             ctx.strokeRect(popupX, popupY, popupWidth, popupHeight);
-            // Content
+
             ctx.textAlign = 'center';
-            // Title in gold (25% bigger, try one line)
+
             ctx.fillStyle = '#FFD700';
             ctx.strokeStyle = '#000000';
             ctx.lineWidth = 3;
@@ -1688,13 +1663,12 @@
             ctx.font = '34px Luckiest Guy, Arial';
             ctx.fillText('Your spells:', canvas.width / 2, yPos);
             yPos += 120;
-            // Spell icons and descriptions (20% bigger circles)
-            ctx.font = '30px Luckiest Guy, Arial';
-            const iconSize = 72; // 20% bigger than 60
-            const iconX = canvas.width / 2 - 240;
-            const textOffset = 80; // More gap between icon and text
 
-            // Blue spell
+            ctx.font = '30px Luckiest Guy, Arial';
+            const iconSize = 72;
+            const iconX = canvas.width / 2 - 240;
+            const textOffset = 80;
+
             ctx.fillStyle = '#0066FF';
             ctx.beginPath();
             ctx.arc(iconX, yPos, iconSize / 2, 0, Math.PI * 2);
@@ -1703,7 +1677,7 @@
             ctx.textAlign = 'left';
             ctx.fillText('Draw bridges and ramps', iconX + textOffset, yPos + 10);
             yPos += 120;
-            // Red spell
+
             ctx.fillStyle = '#FF4444';
             ctx.beginPath();
             ctx.arc(iconX, yPos, iconSize / 2, 0, Math.PI * 2);
@@ -1711,7 +1685,7 @@
             ctx.fillStyle = '#FFFFFF';
             ctx.fillText('Blow up the terrain', iconX + textOffset, yPos + 10);
             yPos += 120;
-            // Purple spell
+
             ctx.fillStyle = '#AA44FF';
             ctx.beginPath();
             ctx.arc(iconX, yPos, iconSize / 2, 0, Math.PI * 2);
@@ -1720,7 +1694,6 @@
             ctx.fillText('Make a wall', iconX + textOffset, yPos + 10);
             yPos += 120;
 
-            // Speed button (bigger and in pressed state)
             const buttonWidth = 90;
             const buttonHeight = 60;
             ctx.fillStyle = '#4CAF50';
@@ -1729,7 +1702,6 @@
             ctx.fillRect(iconX - buttonWidth / 2, yPos - buttonHeight / 2, buttonWidth, buttonHeight);
             ctx.strokeRect(iconX - buttonWidth / 2, yPos - buttonHeight / 2, buttonWidth, buttonHeight);
 
-            // Three gold arrows
             ctx.fillStyle = '#FFD700';
             ctx.font = '32px Luckiest Guy, Arial';
             ctx.textAlign = 'center';
@@ -1748,7 +1720,6 @@
             ctx.textBaseline = 'alphabetic';
             ctx.fillText('Speed up game', iconX + textOffset, yPos + 10);
 
-            // OK button
             helpPopup.okButton.x = canvas.width / 2 - helpPopup.okButton.width / 2;
             helpPopup.okButton.y = popupY + popupHeight - 90;
             ctx.fillStyle = '#FF4444';
@@ -1768,7 +1739,6 @@
         }
 
         function startGame() {
-            console.log('Starting game!');
             gameState = 'playing';
             startScreenPenguins = [];
             generateTerrain();
@@ -1780,9 +1750,6 @@
         }
 
         function restartGame() {
-            console.log('Restarting game from game over!');
-
-            // Reset all game state variables
             lemmings = [];
             drawnLines = [];
             lemmingsSpawned = 0;
@@ -1802,14 +1769,12 @@
             foamParticles = [];
             gameOverButton.visible = false;
 
-            // Generate new terrain and start
             generateTerrain();
             gameStartTime = Date.now();
             gameState = 'playing';
             gameActive = true;
             startShipSeaRocking();
 
-            // CRITICAL: Restart the game loop
             requestAnimationFrame(gameLoop);
         }
 
@@ -1817,15 +1782,12 @@
             const pos = getMousePos(event);
 
             if (gameState === 'start') {
-                // Check if help popup is open
                 if (helpPopup.visible) {
-                    // Check if clicking OK button
                     if (isPointInButton(pos.x, pos.y, helpPopup.okButton)) {
                         helpPopup.visible = false;
                         return;
                     }
 
-                    // Check if clicking outside popup (close it)
                     const popupWidth = canvas.width * 0.8;
                     const popupHeight = canvas.height * 0.8;
                     const popupX = (canvas.width - popupWidth) / 2;
@@ -1837,18 +1799,15 @@
                         return;
                     }
 
-                    // Click inside popup but not on button - do nothing
                     return;
                 }
 
-                // Check if clicking PLAY button
                 if (startButton.visible && isPointInButton(pos.x, pos.y, startButton)) {
                     startGame();
                     startShipSeaRocking();
                     return;
                 }
 
-                // Check if clicking HELP button
                 if (helpButton.visible && isPointInButton(pos.x, pos.y, helpButton)) {
                     helpPopup.visible = true;
                     return;
@@ -1876,14 +1835,12 @@
             if (isPointInButton(pos.x, pos.y, speedButton)) {
                 speedButton.pressed = !speedButton.pressed;
                 gameSpeed = speedButton.pressed ? 8 : 1;
-                console.log(`Game speed changed to ${gameSpeed}x`);
                 return;
             }
 
             for (let button of spellButtons) {
                 if (isPointInCircleButton(pos.x, pos.y, button)) {
                     currentSpell = button.spell;
-                    console.log(`Selected ${button.name} spell`);
                     return;
                 }
             }
@@ -1892,7 +1849,6 @@
 
             if (mana < minMana) {
                 createSpellParticles(pos.x, pos.y, currentSpell);
-                console.log(`Not enough mana! Need at least ${minMana}, have ${mana}`);
                 return;
             }
 
@@ -1931,7 +1887,6 @@
                     const lineCost = getLinePixelLength(snappedLine);
 
                     if (mana < lineCost) {
-                        console.log(`Not enough mana for blue line! Need ${lineCost}, have ${mana}`);
                         drawStart = null;
                         drawCurrent = null;
                         return;
@@ -1945,8 +1900,6 @@
 
                     manaAnimation.active = true;
                     manaAnimation.startTime = Date.now();
-
-                    console.log(`Drew blue line, -${lineCost} mana (${mana} remaining)`);
                 }
             }
 
@@ -1959,15 +1912,12 @@
             const pos = getTouchPos(event);
 
             if (gameState === 'start') {
-                // Check if help popup is open
                 if (helpPopup.visible) {
-                    // Check if clicking OK button
                     if (isPointInButton(pos.x, pos.y, helpPopup.okButton)) {
                         helpPopup.visible = false;
                         return;
                     }
 
-                    // Check if clicking outside popup (close it)
                     const popupWidth = canvas.width * 0.8;
                     const popupHeight = canvas.height * 0.8;
                     const popupX = (canvas.width - popupWidth) / 2;
@@ -1979,18 +1929,15 @@
                         return;
                     }
 
-                    // Click inside popup but not on button - do nothing
                     return;
                 }
 
-                // Check if clicking PLAY button
                 if (startButton.visible && isPointInButton(pos.x, pos.y, startButton)) {
                     startGame();
                     startShipSeaRocking();
                     return;
                 }
 
-                // Check if clicking HELP button
                 if (helpButton.visible && isPointInButton(pos.x, pos.y, helpButton)) {
                     helpPopup.visible = true;
                     return;
@@ -2018,14 +1965,12 @@
             if (isPointInButton(pos.x, pos.y, speedButton)) {
                 speedButton.pressed = !speedButton.pressed;
                 gameSpeed = speedButton.pressed ? 8 : 1;
-                console.log(`Game speed changed to ${gameSpeed}x`);
                 return;
             }
 
             for (let button of spellButtons) {
                 if (isPointInCircleButton(pos.x, pos.y, button)) {
                     currentSpell = button.spell;
-                    console.log(`Selected ${button.name} spell`);
                     return;
                 }
             }
@@ -2034,7 +1979,6 @@
 
             if (mana < minMana) {
                 createSpellParticles(pos.x, pos.y, currentSpell);
-                console.log(`Not enough mana! Need at least ${minMana}, have ${mana}`);
                 return;
             }
 
@@ -2075,7 +2019,6 @@
                     const lineCost = getLinePixelLength(snappedLine);
 
                     if (mana < lineCost) {
-                        console.log(`Not enough mana for blue line! Need ${lineCost}, have ${mana}`);
                         drawStart = null;
                         drawCurrent = null;
                         return;
@@ -2089,8 +2032,6 @@
 
                     manaAnimation.active = true;
                     manaAnimation.startTime = Date.now();
-
-                    console.log(`Drew blue line, -${lineCost} mana (${mana} remaining)`);
                 }
             }
 
@@ -2098,22 +2039,15 @@
             drawCurrent = null;
         }, { passive: false });
 
-        // Farcade SDK: Register event handlers for 'play_again' and 'toggle_mute'
         if (window.FarcadeSDK) {
-            // Handle play again requests from Farcade
             window.FarcadeSDK.on('play_again', () => {
-                console.log('Farcade SDK: Play again requested.');
                 if (gameState === 'gameover') {
                     restartGame();
                 }
             });
 
-            // Handle mute/unmute requests from Farcade
             window.FarcadeSDK.on('toggle_mute', (data) => {
-                console.log('Farcade SDK: Mute toggle requested, isMuted:', data.isMuted);
-
                 if (data.isMuted) {
-                    // Mute the music
                     if (currentAudio) {
                         currentAudio.volume = 0;
                     }
@@ -2121,7 +2055,6 @@
                         nextAudio.volume = 0;
                     }
                 } else {
-                    // Unmute the music
                     if (currentAudio) {
                         currentAudio.volume = 0.7;
                     }
@@ -2129,11 +2062,7 @@
                         nextAudio.volume = 0.7;
                     }
                 }
-
-                console.log('Farcade SDK: Music mute state set to:', data.isMuted);
             });
-
-            console.log('Farcade SDK: Event handlers registered.');
         }
 
         function spawnLemming() {
@@ -2143,8 +2072,6 @@
                 lemmingsSpawned++;
 
                 pulseIgloo();
-
-                console.log(`Spawned penguin ${lemmingsSpawned}/${maxLemmings} at entrance`);
             }
         }
 
@@ -2178,27 +2105,19 @@
             ctx.strokeStyle = '#000000';
             ctx.lineWidth = 3;
             ctx.font = '24px Luckiest Guy, Arial';
-            const maxWidth = canvas.width - 100;
-            const lineHeight = 32;
-            const words = currentHint.split(' ');
-            let line = '';
+            const lineHeight = 36;
             let y = canvas.height / 2 + 50;
 
-            for (let i = 0; i < words.length; i++) {
-                const testLine = line + words[i] + ' ';
-                const metrics = ctx.measureText(testLine);
+            // Split by sentences (periods) and display each on its own line
+            const sentences = currentHint.split('. ').filter(s => s.length > 0);
 
-                if (metrics.width > maxWidth && i > 0) {
-                    ctx.strokeText(line, canvas.width / 2, y);
-                    ctx.fillText(line, canvas.width / 2, y);
-                    line = words[i] + ' ';
-                    y += lineHeight;
-                } else {
-                    line = testLine;
-                }
-            }
-            ctx.strokeText(line, canvas.width / 2, y);
-            ctx.fillText(line, canvas.width / 2, y);
+            sentences.forEach((sentence, index) => {
+                // Add period back if it's not the last sentence
+                const displayText = (index < sentences.length - 1 && !sentence.endsWith('.')) ? sentence + '.' : sentence;
+                ctx.strokeText(displayText, canvas.width / 2, y);
+                ctx.fillText(displayText, canvas.width / 2, y);
+                y += lineHeight;
+            });
 
             intermissionButton.x = canvas.width / 2 - intermissionButton.width / 2;
             intermissionButton.y = canvas.height - 200;
@@ -2235,7 +2154,6 @@
             ctx.strokeText(`Reached Level ${currentLevel}`, canvas.width / 2, canvas.height / 2 + 40);
             ctx.fillText(`Reached Level ${currentLevel}`, canvas.width / 2, canvas.height / 2 + 40);
 
-            // Only draw play again button if Farcade SDK is not present
             if (!window.FarcadeSDK) {
                 gameOverButton.x = canvas.width / 2 - gameOverButton.width / 2;
                 gameOverButton.y = canvas.height / 2 + 100;
@@ -2257,6 +2175,7 @@
 
             const now = Date.now();
 
+            // --- Score pulse animation ---
             if (scoreAnimation.active) {
                 const elapsed = now - scoreAnimation.startTime;
                 const duration = 300;
@@ -2269,6 +2188,7 @@
                 }
             }
 
+            // --- Mana shake animation ---
             if (manaAnimation.active) {
                 const elapsed = now - manaAnimation.startTime;
                 const duration = 200;
@@ -2281,22 +2201,24 @@
                 }
             }
 
+            // --- Score (top center) ---
             ctx.save();
-            ctx.translate(canvas.width / 2, 55);
+            ctx.translate(canvas.width / 2, 60);
             ctx.scale(scoreAnimation.scale, scoreAnimation.scale);
             ctx.fillStyle = '#FFD700';
             ctx.strokeStyle = '#000000';
             ctx.lineWidth = 3;
-            ctx.font = '48px Luckiest Guy, Arial';
+            ctx.font = '64px Luckiest Guy, Arial';
             ctx.textAlign = 'center';
             ctx.strokeText(`${score}`, 0, 0);
             ctx.fillText(`${score}`, 0, 0);
             ctx.restore();
 
+            // --- Timer (top right) ---
             ctx.fillStyle = '#FFFFFF';
             ctx.strokeStyle = '#000000';
             ctx.lineWidth = 3;
-            ctx.font = '36px Luckiest Guy, Arial';
+            ctx.font = '48px Luckiest Guy, Arial';
             ctx.textAlign = 'right';
 
             const remainingTime = Math.max(0, levelTime - accumulatedTime);
@@ -2304,36 +2226,32 @@
             const seconds = Math.floor((remainingTime % 60000) / 1000);
             const timeText = `${minutes}:${seconds.toString().padStart(2, '0')}`;
 
-            ctx.strokeText(timeText, canvas.width - 20, 50);
-            ctx.fillText(timeText, canvas.width - 20, 50);
+            ctx.strokeText(timeText, canvas.width - 30, 50);
+            ctx.fillText(timeText, canvas.width - 30, 50);
 
+            // --- Penguin count (top left) ---
             ctx.textAlign = 'left';
-            ctx.font = '30px Luckiest Guy, Arial';
+            ctx.font = '40px Luckiest Guy, Arial';
             const penguinText = `${lemmingsSaved}/${lemmingsSpawned}`;
+            ctx.strokeText(penguinText, 30, 50);
+            ctx.fillText(penguinText, 30, 50);
 
-            ctx.strokeText(penguinText, 20, 50);
-            ctx.fillText(penguinText, 20, 50);
-
+            // --- Mana (bottom-left corner, keeping your cyan style & shake) ---
             ctx.save();
-            ctx.translate(canvas.width / 2 + manaAnimation.shake, canvas.height - 40);
-            ctx.fillStyle = '#00BFFF';
-            ctx.font = '48px Luckiest Guy, Arial';
+            ctx.translate(100 + manaAnimation.shake, canvas.height - 60);
+            ctx.fillStyle = '#00BFFF'; // your original mana color
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 3;
+            ctx.font = '64px Luckiest Guy, Arial';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.strokeText(`${mana}`, 0, 0);
             ctx.fillText(`${mana}`, 0, 0);
             ctx.restore();
 
-            if (gameSpeed > 1) {
-                ctx.textAlign = 'center';
-                ctx.font = '24px Luckiest Guy, Arial';
-                ctx.fillStyle = '#FFD700';
-                ctx.strokeText(`Speed: ${gameSpeed}x`, speedButton.x + speedButton.width / 2, speedButton.y - 10);
-                ctx.fillText(`Speed: ${gameSpeed}x`, speedButton.x + speedButton.width / 2, speedButton.y - 10);
-            }
-
             ctx.restore();
         }
+
 
         function drawGame() {
             if (gameState === 'intermission') {
@@ -2391,16 +2309,12 @@
             createJumpingPudgies();
             intermissionButton.visible = true;
 
-            console.log(`Level ${currentLevel} completed! +${levelCompleteBonus} mana (total: ${mana})`);
-
             requestAnimationFrame(gameLoop);
         }
 
         function startNextLevel() {
             currentLevel++;
             const penguinsForNextLevel = lemmingsSaved;
-
-            console.log(`Starting Level ${currentLevel} with ${penguinsForNextLevel} penguins`);
 
             lemmings = [];
             drawnLines = [];
@@ -2470,28 +2384,23 @@
             const remainingTime = levelTime - accumulatedTime;
 
             if (remainingTime <= 0) {
-                console.log(`TIMER EXPIRED - Saved: ${lemmingsSaved}`);
                 gameActive = false;
 
                 if (lemmingsSaved > 0) {
-                    console.log(`Timer expired with ${lemmingsSaved} penguins saved - advancing to next level`);
                     setTimeout(() => {
                         nextLevel();
                     }, 1000);
                 } else {
-                    console.log(`Timer expired with 0 penguins saved - GAME OVER`);
                     gameState = 'gameover';
-                    gameOverButton.visible = !window.FarcadeSDK; // Only show button if not using Farcade
+                    gameOverButton.visible = !window.FarcadeSDK;
 
                     setTimeout(() => {
                         drawGame();
                     }, 1000);
 
-                    // Farcade SDK: Call gameOver with score after 2 second delay
                     if (window.FarcadeSDK) {
                         setTimeout(() => {
                             window.FarcadeSDK.singlePlayer.actions.gameOver({ score: score });
-                            console.log('Farcade SDK: Game over signal sent with score:', score);
                         }, 2000);
                     }
                 }
@@ -2502,7 +2411,6 @@
             const noPenguinsActive = lemmings.filter(l => l.alive).length === 0;
 
             if (allPenguinsSpawned && noPenguinsActive && lemmingsSaved > 0) {
-                console.log(`EARLY COMPLETION - Spawned: ${lemmingsSpawned}, Active: ${lemmings.filter(l => l.alive).length}, Saved: ${lemmingsSaved}`);
                 gameActive = false;
                 setTimeout(() => {
                     nextLevel();
@@ -2531,6 +2439,209 @@
                 requestAnimationFrame(gameLoop);
             }
         }
+
+        // L Pattern Background System - Clean implementation
+        const LPatternBackgroundSystem = {
+            patternCanvas: null,
+            borderCanvas: null,
+            isInitialized: false,
+
+            config: {
+                size: 6,
+                thickness: 4,
+                spacing: 4,
+                color: '#FFD700',
+                opacity: 0.5,
+                borderWidth: 8
+            },
+
+            init: function () {
+                if (this.isInitialized) return;
+
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', () => this.init());
+                    return;
+                }
+
+                this.createCanvases();
+
+                if (this.patternCanvas) {
+                    this.drawPattern();
+                }
+
+                setTimeout(() => {
+                    this.updateBorders();
+                }, 100);
+
+                window.addEventListener('resize', () => this.handleResize());
+
+                this.isInitialized = true;
+            },
+
+            createCanvases: function () {
+                if (window.innerWidth <= 0 || window.innerHeight <= 0) {
+                    setTimeout(() => this.createCanvases(), 100);
+                    return;
+                }
+
+                try {
+                    this.patternCanvas = document.createElement('canvas');
+                    this.patternCanvas.style.position = 'absolute';
+                    this.patternCanvas.style.top = '0';
+                    this.patternCanvas.style.left = '0';
+                    this.patternCanvas.style.width = '100%';
+                    this.patternCanvas.style.height = '100%';
+                    this.patternCanvas.style.pointerEvents = 'none';
+                    this.patternCanvas.style.zIndex = '1';
+                    this.patternCanvas.width = window.innerWidth;
+                    this.patternCanvas.height = window.innerHeight;
+                    document.body.insertBefore(this.patternCanvas, document.body.firstChild);
+
+                    this.borderCanvas = document.createElement('canvas');
+                    this.borderCanvas.style.position = 'absolute';
+                    this.borderCanvas.style.top = '0';
+                    this.borderCanvas.style.left = '0';
+                    this.borderCanvas.style.width = '100%';
+                    this.borderCanvas.style.height = '100%';
+                    this.borderCanvas.style.pointerEvents = 'none';
+                    this.borderCanvas.style.zIndex = '2';
+                    this.borderCanvas.width = window.innerWidth;
+                    this.borderCanvas.height = window.innerHeight;
+                    document.body.insertBefore(this.borderCanvas, document.body.firstChild);
+                } catch (error) {
+                    console.error("Failed to create canvas elements:", error);
+                }
+            },
+
+            findGameCanvas: function () {
+                return document.getElementById('terrainCanvas');
+            },
+
+            getLetterboxingSides: function () {
+                const gameCanvas = this.findGameCanvas();
+                if (!gameCanvas) {
+                    return { top: false, bottom: false, left: false, right: false };
+                }
+
+                const canvasRect = gameCanvas.getBoundingClientRect();
+                const viewportWidth = window.innerWidth;
+                const viewportHeight = window.innerHeight;
+
+                return {
+                    left: canvasRect.left > 5,
+                    right: (viewportWidth - canvasRect.right) > 5,
+                    top: canvasRect.top > 5,
+                    bottom: (viewportHeight - canvasRect.bottom) > 5
+                };
+            },
+
+            updateBorders: function () {
+                if (!this.borderCanvas) return;
+
+                const sides = this.getLetterboxingSides();
+                const hasLetterboxing = sides.left || sides.right || sides.top || sides.bottom;
+
+                if (hasLetterboxing) {
+                    this.drawGameBorder(sides);
+                } else {
+                    this.clearBorder();
+                }
+            },
+
+            drawPattern: function () {
+                if (!this.patternCanvas) return;
+
+                const ctx = this.patternCanvas.getContext('2d');
+                if (!ctx) return;
+
+                ctx.clearRect(0, 0, this.patternCanvas.width, this.patternCanvas.height);
+
+                const vHeight = this.config.size * 3;
+                const hWidth = this.config.size * 2;
+                const thickness = this.config.thickness;
+                const overlap = hWidth * 0.6;
+                const pairWidth = hWidth * 1.6;
+                const patternWidth = pairWidth + this.config.spacing;
+                const vSpacing = vHeight + this.config.spacing;
+
+                const cols = Math.ceil(this.patternCanvas.width / patternWidth) + 2;
+                const rows = Math.ceil(this.patternCanvas.height / vSpacing) + 1;
+
+                for (let row = 0; row < rows; row++) {
+                    const rowOffset = (row % 2 === 1) ? patternWidth / 3 : 0;
+                    const y = row * vSpacing;
+                    const alpha = (row % 2 === 0) ? this.config.opacity * 0.6 : this.config.opacity;
+
+                    for (let col = 0; col < cols; col++) {
+                        const x = col * patternWidth - rowOffset;
+
+                        // Normal L
+                        ctx.globalAlpha = alpha;
+                        ctx.fillStyle = this.config.color;
+                        ctx.fillRect(x, y, thickness, vHeight);
+                        ctx.fillRect(x, y + vHeight - thickness, hWidth, thickness);
+
+                        // Inverted L
+                        const ix = x + overlap;
+                        ctx.fillRect(ix, y, hWidth, thickness);
+                        ctx.fillRect(ix + hWidth - thickness, y, thickness, vHeight);
+                    }
+                }
+
+                ctx.globalAlpha = 1.0;
+            },
+
+            drawGameBorder: function (sides) {
+                const gameCanvas = this.findGameCanvas();
+                if (!gameCanvas || !this.borderCanvas) return;
+
+                const ctx = this.borderCanvas.getContext('2d');
+                if (!ctx) return;
+
+                ctx.clearRect(0, 0, this.borderCanvas.width, this.borderCanvas.height);
+
+                const rect = gameCanvas.getBoundingClientRect();
+                const bw = this.config.borderWidth;
+
+                ctx.fillStyle = this.config.color;
+
+                if (sides.top) {
+                    ctx.fillRect(rect.left - bw, rect.top - bw, rect.width + bw * 2, bw);
+                }
+                if (sides.bottom) {
+                    ctx.fillRect(rect.left - bw, rect.bottom, rect.width + bw * 2, bw);
+                }
+                if (sides.left) {
+                    ctx.fillRect(rect.left - bw, rect.top, bw, rect.height);
+                }
+                if (sides.right) {
+                    ctx.fillRect(rect.right, rect.top, bw, rect.height);
+                }
+            },
+
+            clearBorder: function () {
+                if (!this.borderCanvas) return;
+                const ctx = this.borderCanvas.getContext('2d');
+                if (ctx) {
+                    ctx.clearRect(0, 0, this.borderCanvas.width, this.borderCanvas.height);
+                }
+            },
+
+            handleResize: function () {
+                if (!this.patternCanvas || !this.borderCanvas) return;
+
+                this.patternCanvas.width = window.innerWidth;
+                this.patternCanvas.height = window.innerHeight;
+                this.borderCanvas.width = window.innerWidth;
+                this.borderCanvas.height = window.innerHeight;
+
+                this.drawPattern();
+
+                setTimeout(() => {
+                    this.updateBorders();
+                }, 100);
+            }
+        };
     </script>
 </body>
 
