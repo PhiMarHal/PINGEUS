@@ -36,7 +36,7 @@
             height: auto;
             display: block;
             touch-action: none;
-            position: relative;
+            position: absolute;
             z-index: 100;
         }
     </style>
@@ -2440,6 +2440,9 @@
             }
         }
 
+        const TARGET_RATIO = 2 / 3;
+        const EPSILON = 0.0001;
+
         // L Pattern Background System - Clean implementation
         const LPatternBackgroundSystem = {
             patternCanvas: null,
@@ -2536,15 +2539,82 @@
             },
 
             updateBorders: function () {
-                if (!this.borderCanvas) return;
+                const screenWidth = window.innerWidth;
+                const screenHeight = window.innerHeight;
+                const screenRatio = screenWidth / screenHeight;
 
-                const sides = this.getLetterboxingSides();
-                const hasLetterboxing = sides.left || sides.right || sides.top || sides.bottom;
+                let gameWidth;
+                let gameHeight;
+                let xOffset;
+                let yOffset;
 
-                if (hasLetterboxing) {
-                    this.drawGameBorder(sides);
+                // --- 1. ASPECT RATIO SIZING ---
+                if (screenRatio >= TARGET_RATIO - EPSILON) {
+                    // Pillarbox/Near-Perfect 2:3 Logic
+                    gameHeight = screenHeight;
+                    gameWidth = gameHeight * TARGET_RATIO;
+                    xOffset = (screenWidth - gameWidth) / 2;
+                    yOffset = 0;
                 } else {
-                    this.clearBorder();
+                    // Letterbox Logic
+                    gameWidth = screenWidth;
+                    gameHeight = gameWidth / TARGET_RATIO;
+                    xOffset = 0;
+                    yOffset = (screenHeight - gameHeight) / 2;
+                }
+
+                // --- 2. CANVAS RECT CALCULATION (FINAL, TARGETED FIXES) ---
+
+                // A. Vertical Overlap (Fixes top/bottom lines, which previously worked)
+                const finalTop = Math.ceil(yOffset) - 1;
+                const finalHeight = Math.ceil(gameHeight) + 2;
+
+                // B. Horizontal Sizing and Overlap (Targeted Fix for the Right Line)
+                let finalLeft;
+                let finalWidth;
+
+                // CRITICAL FINAL FIX: If screen is near-perfect 2:3 (xOffset is near 0),
+                // force the canvas to start at 0 and extend 1px past the right edge.
+                if (Math.abs(xOffset) < EPSILON) {
+                    finalLeft = 0; // Starts exactly at the left edge
+                    finalWidth = window.innerWidth + 1; // Extends 1px past the right edge
+                } else {
+                    // For non-2:3 environments (Pillarbox/Letterbox), use the previous stable overlap logic.
+                    finalLeft = Math.round(xOffset) - 1;
+                    finalWidth = Math.ceil(gameWidth) + 2;
+                }
+
+                const rect = {
+                    left: finalLeft,
+                    top: finalTop,
+                    width: finalWidth,
+                    height: finalHeight,
+
+                    // These are used for the border drawing logic.
+                    right: Math.ceil(xOffset + gameWidth),
+                    bottom: Math.ceil(yOffset + gameHeight),
+                };
+
+                // Update the game canvas style
+                const gameCanvas = document.getElementById('terrainCanvas');
+                if (gameCanvas) {
+                    gameCanvas.style.width = rect.width + 'px';
+                    gameCanvas.style.height = rect.height + 'px';
+                    gameCanvas.style.left = rect.left + 'px';
+                    gameCanvas.style.top = rect.top + 'px';
+                }
+
+                // --- 3. BORDER DRAWING ---
+
+                this.clearBorder();
+
+                // Only draw the explicit letterboxing border if the ratio is NOT near-perfect
+                if (screenRatio > TARGET_RATIO + EPSILON) {
+                    // Pillarbox: Draw left and right borders
+                    this.drawGameBorder({ left: true, right: true, top: false, bottom: false });
+                } else if (screenRatio < TARGET_RATIO - EPSILON) {
+                    // Letterbox: Draw top and bottom borders
+                    this.drawGameBorder({ top: true, bottom: true, left: false, right: false });
                 }
             },
 
