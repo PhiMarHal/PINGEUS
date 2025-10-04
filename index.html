@@ -314,7 +314,8 @@
             pudgy_walk_6: new Image(),
             ground_1: new Image(),
             ground_2: new Image(),
-            ground_3: new Image()
+            ground_3: new Image(),
+            ground_4: new Image()
         };
 
         sprites.igloo.src = BASE_URL + 'igloo.png';
@@ -330,9 +331,10 @@
         sprites.ground_1.src = BASE_URL + 'ground_1.png';
         sprites.ground_2.src = BASE_URL + 'ground_2.png';
         sprites.ground_3.src = BASE_URL + 'ground_3.png';
+        sprites.ground_4.src = BASE_URL + 'ground_4.png';
 
         let spritesLoaded = 0;
-        const totalSprites = 13;
+        const totalSprites = 14;
 
         function onSpriteLoad() {
             spritesLoaded++;
@@ -353,20 +355,28 @@
         }
 
         function updateTerrainVisuals() {
-            const levelCycle = Math.floor((currentLevel - 1) / 4) % 3;
+            const levelCycle = Math.floor((currentLevel - 1) / 4) % 4;
 
             if (levelCycle === 0) {
+                // Levels 1-4, 17-20, 33-36, etc.
                 groundPattern = terrainCtx.createPattern(sprites.ground_1, 'repeat');
                 currentOutlineColor = '#00AA00';
                 currentSkyColor = '#87CEEB';
             } else if (levelCycle === 1) {
+                // Levels 5-8, 21-24, 37-40, etc.
                 groundPattern = terrainCtx.createPattern(sprites.ground_2, 'repeat');
                 currentOutlineColor = '#9933FF';
                 currentSkyColor = '#f9ced9';
-            } else {
+            } else if (levelCycle === 2) {
+                // Levels 9-12, 25-28, 41-44, etc.
                 groundPattern = terrainCtx.createPattern(sprites.ground_3, 'repeat');
                 currentOutlineColor = '#5B9BD5';
                 currentSkyColor = '#4716b7';
+            } else {
+                // Levels 13-16, 29-32, 45-48, etc.
+                groundPattern = terrainCtx.createPattern(sprites.ground_4, 'repeat');
+                currentOutlineColor = '#2d5016';
+                currentSkyColor = '#c8fc8c';
             }
         }
 
@@ -383,6 +393,22 @@
         sprites.ground_1.onload = onSpriteLoad;
         sprites.ground_2.onload = onSpriteLoad;
         sprites.ground_3.onload = onSpriteLoad;
+        sprites.ground_4.onload = onSpriteLoad;
+
+        sprites.igloo.onerror = () => console.error('Failed to load igloo.png');
+        sprites.ship.onerror = () => console.error('Failed to load ship.png');
+        sprites.penguin.onerror = () => console.error('Failed to load penguin.png');
+        sprites.pudgy_jump.onerror = () => console.error('Failed to load pudgy_jump.png');
+        sprites.pudgy_walk_1.onerror = () => console.error('Failed to load pudgy_walk_1.png');
+        sprites.pudgy_walk_2.onerror = () => console.error('Failed to load pudgy_walk_2.png');
+        sprites.pudgy_walk_3.onerror = () => console.error('Failed to load pudgy_walk_3.png');
+        sprites.pudgy_walk_4.onerror = () => console.error('Failed to load pudgy_walk_4.png');
+        sprites.pudgy_walk_5.onerror = () => console.error('Failed to load pudgy_walk_5.png');
+        sprites.pudgy_walk_6.onerror = () => console.error('Failed to load pudgy_walk_6.png');
+        sprites.ground_1.onerror = () => console.error('Failed to load ground_1.png');
+        sprites.ground_2.onerror = () => console.error('Failed to load ground_2.png');
+        sprites.ground_3.onerror = () => console.error('Failed to load ground_3.png');
+        sprites.ground_4.onerror = () => console.error('Failed to load ground_4.png');
 
         function isSolidPixel(x, y) {
             x = Math.floor(x);
