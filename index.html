@@ -61,6 +61,9 @@
         terrainCanvas.height = canvas.height;
         const terrainCtx = terrainCanvas.getContext('2d');
 
+        // Testing constant - set to 1 for production
+        const STARTING_LEVEL = 13;
+
         let numPoints = 45;
         let terrainRatio = 0.4;
         let points = [];
@@ -79,7 +82,7 @@
 
         let levelTime = 240000;
         let gameStartTime = 0;
-        let currentLevel = 1;
+        let currentLevel = STARTING_LEVEL;
         let gameActive = true;
         let accumulatedTime = 0;
         let gameState = 'start';
@@ -90,6 +93,11 @@
         let manaOrb = null;
         let manaOrbScale = 1;
         let manaTextAnimations = [];
+
+        // Nappy penguin state
+        let nappyPenguin = null;
+        let nappyPenguinScale = 1;
+        let penguinCountTextAnimations = [];
 
         const gameHints = [
             "Ending a level gives you mana. Earlier levels give more mana.",
@@ -326,7 +334,8 @@
             ground_2: new Image(),
             ground_3: new Image(),
             ground_4: new Image(),
-            mana_orb: new Image()
+            mana_orb: new Image(),
+            pudgy_nappy: new Image()
         };
 
         sprites.igloo.src = BASE_URL + 'igloo.png';
@@ -344,9 +353,10 @@
         sprites.ground_3.src = BASE_URL + 'ground_3.png';
         sprites.ground_4.src = BASE_URL + 'ground_4.png';
         sprites.mana_orb.src = BASE_URL + 'mana_orb.png';
+        sprites.pudgy_nappy.src = BASE_URL + 'pudgy_nappy.png';
 
         let spritesLoaded = 0;
-        const totalSprites = 15;
+        const totalSprites = 16;
 
         function onSpriteLoad() {
             spritesLoaded++;
@@ -402,6 +412,7 @@
         sprites.ground_3.onload = onSpriteLoad;
         sprites.ground_4.onload = onSpriteLoad;
         sprites.mana_orb.onload = onSpriteLoad;
+        sprites.pudgy_nappy.onload = onSpriteLoad;
 
         sprites.igloo.onerror = () => console.error('Failed to load igloo.png');
         sprites.ship.onerror = () => console.error('Failed to load ship.png');
@@ -418,6 +429,7 @@
         sprites.ground_3.onerror = () => console.error('Failed to load ground_3.png');
         sprites.ground_4.onerror = () => console.error('Failed to load ground_4.png');
         sprites.mana_orb.onerror = () => console.error('Failed to load mana_orb.png');
+        sprites.pudgy_nappy.onerror = () => console.error('Failed to load pudgy_nappy.png');
 
         function isSolidPixel(x, y) {
             x = Math.floor(x);
@@ -709,6 +721,17 @@
                     }
                 }
 
+                // Check nappy penguin collision
+                if (nappyPenguin && nappyPenguin.active) {
+                    const dx = (this.x + this.width / 2) - nappyPenguin.x;
+                    const dy = (this.y + this.height / 2) - (nappyPenguin.y + 40);
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+
+                    if (distance < 45) {
+                        wakeNappyPenguin();
+                    }
+                }
+
                 if (exit && this.distance(this.x + this.width / 2, this.y + this.height / 2, exit.x, exit.y) < 60) {
                     this.alive = false;
                     lemmingsSaved++;
@@ -936,6 +959,7 @@
             drawTerrainOnly();
             findSpawnPoints();
             spawnManaOrb();
+            spawnNappyPenguin();
             drawStaticTerrain();
         }
 
@@ -977,6 +1001,47 @@
                     };
                     break;
                 }
+            }
+        }
+
+        function spawnNappyPenguin() {
+            nappyPenguin = null;
+
+            // Only spawn nappy penguin from level 13 onwards
+            if (currentLevel < 13) return;
+
+            const surfacePoints = [];
+            const scanStep = 30;
+            const bottomSafeZone = canvas.height * 0.98;
+            const bottomUIZone = { minY: canvas.height - 110 };
+
+            for (let x = 80; x < canvas.width - 80; x += scanStep) {
+                for (let y = 100; y < bottomSafeZone; y += scanStep) {
+                    if (isTerrainAt(x, y)) {
+                        const hasSpaceAbove = !isTerrainAt(x, y - 50) && !isTerrainAt(x, y - 35);
+
+                        if (hasSpaceAbove) {
+                            const leftOk = isTerrainAt(x - scanStep, y) || isTerrainAt(x - scanStep, y + 12);
+                            const rightOk = isTerrainAt(x + scanStep, y) || isTerrainAt(x + scanStep, y + 12);
+                            const notInBottomUI = y < bottomUIZone.minY;
+
+                            if (leftOk && rightOk && notInBottomUI) {
+                                surfacePoints.push({ x, y });
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (surfacePoints.length > 0) {
+                const spawnSurface = surfacePoints[Math.floor(Math.random() * surfacePoints.length)];
+                nappyPenguin = {
+                    x: spawnSurface.x,
+                    y: spawnSurface.y - 45,
+                    active: true,
+                    breathPhase: 0,
+                    zPhase: 0
+                };
             }
         }
 
@@ -1026,10 +1091,71 @@
             manaAnimation.startTime = Date.now();
         }
 
+        function wakeNappyPenguin() {
+            if (!nappyPenguin || !nappyPenguin.active) return;
+
+            // Create particle burst
+            const numParticles = 15;
+            const colors = ['#FFD700', '#FFA500', '#FF8C00', '#FFFF00', '#FFC700'];
+
+            for (let i = 0; i < numParticles; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 1.5 + Math.random() * 1.5;
+                const color = colors[Math.floor(Math.random() * colors.length)];
+
+                particles.push({
+                    x: nappyPenguin.x,
+                    y: nappyPenguin.y + 22,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed - 1,
+                    life: 1.0,
+                    decay: 0.01 + Math.random() * 0.01,
+                    color: color
+                });
+            }
+
+            // Spawn a new regular penguin at the nappy penguin's position
+            const newLemming = new Lemming(nappyPenguin.x - 12, nappyPenguin.y);
+            lemmings.push(newLemming);
+            maxLemmings++;
+            lemmingsSpawned++;
+
+            // Create falling text animation for penguin count
+            penguinCountTextAnimations.push({
+                x: 30,
+                y: 80,
+                text: '+1',
+                life: 1.0,
+                startTime: Date.now()
+            });
+
+            // Deactivate nappy penguin
+            nappyPenguin.active = false;
+        }
+
         function updateManaOrb(deltaTime) {
             if (!manaOrb || !manaOrb.active) return;
 
             manaOrb.bobPhase += 0.05 * (deltaTime / 16.67);
+        }
+
+        function updateNappyPenguin(deltaTime) {
+            if (!nappyPenguin || !nappyPenguin.active) return;
+
+            // Breathing animation: pulse for 1 second, pause for 0.5 seconds
+            nappyPenguin.breathPhase += 0.0006 * deltaTime;
+            const breathCycle = nappyPenguin.breathPhase % 1.5;
+
+            if (breathCycle < 1.0) {
+                // Breathing in/out
+                nappyPenguinScale = 1 + Math.sin(breathCycle * Math.PI * 2) * 0.04;
+            } else {
+                // Pause
+                nappyPenguinScale = 1;
+            }
+
+            // Z animation cycle: 2 second cycle with 4 states (z, zZ, zZz, nothing)
+            nappyPenguin.zPhase += 0.0005 * deltaTime;
         }
 
         function drawManaOrb() {
@@ -1043,6 +1169,59 @@
             ctx.scale(manaOrbScale, manaOrbScale);
             ctx.drawImage(sprites.mana_orb, -orbSize / 2, -orbSize / 2, orbSize, orbSize);
             ctx.restore();
+        }
+
+        function drawNappyPenguin() {
+            if (!nappyPenguin || !nappyPenguin.active) return;
+
+            const penguinWidth = 60;
+            const penguinHeight = 45;
+
+            // Draw sleeping penguin with breathing animation
+            ctx.save();
+            ctx.translate(nappyPenguin.x, nappyPenguin.y + penguinHeight / 2);
+            ctx.scale(nappyPenguinScale, nappyPenguinScale);
+            ctx.drawImage(sprites.pudgy_nappy, -penguinWidth / 2, -penguinHeight / 2, penguinWidth, penguinHeight);
+            ctx.restore();
+
+            // Draw Z's animation - 4 states over 2 seconds: z, zZ, zZz, (nothing)
+            const zCycle = (nappyPenguin.zPhase % 2); // 2 second cycle
+            const stateIndex = Math.floor(zCycle / 0.5); // 0, 1, 2, 3
+
+            if (stateIndex < 3) { // Only draw for first 3 states (z, zZ, zZz)
+                ctx.save();
+                ctx.fillStyle = '#FFFFFF';
+                ctx.strokeStyle = '#000000';
+                ctx.lineWidth = 2;
+                ctx.font = '28px Luckiest Guy, Arial';
+                ctx.textAlign = 'center';
+
+                let zText = '';
+                if (stateIndex === 0) zText = 'z';
+                else if (stateIndex === 1) zText = 'zZ';
+                else if (stateIndex === 2) zText = 'zZz';
+
+                const zX = nappyPenguin.x;
+                const zY = nappyPenguin.y - 10;
+                // Gentle bobbing motion - slower and less pronounced than mana orb
+                const zBob = Math.sin(nappyPenguin.zPhase * Math.PI) * 3;
+
+                // Fade in at start of each state, fade out at end
+                const stateProgress = (zCycle % 0.5) / 0.5;
+                let alpha;
+                if (stateProgress < 0.2) {
+                    alpha = stateProgress / 0.2; // Fade in
+                } else if (stateProgress > 0.8) {
+                    alpha = (1 - stateProgress) / 0.2; // Fade out
+                } else {
+                    alpha = 1; // Full opacity
+                }
+
+                ctx.globalAlpha = alpha * 0.9;
+                ctx.strokeText(zText, zX, zY + zBob);
+                ctx.fillText(zText, zX, zY + zBob);
+                ctx.restore();
+            }
         }
 
         function updateManaTextAnimations() {
@@ -1060,6 +1239,21 @@
             manaTextAnimations = manaTextAnimations.filter(anim => anim.life > 0);
         }
 
+        function updatePenguinCountTextAnimations() {
+            const now = Date.now();
+
+            penguinCountTextAnimations.forEach(anim => {
+                const elapsed = now - anim.startTime;
+                const duration = 1500;
+                const progress = elapsed / duration;
+
+                anim.life = 1 - progress;
+                anim.y += 0.5; // Fall down
+            });
+
+            penguinCountTextAnimations = penguinCountTextAnimations.filter(anim => anim.life > 0);
+        }
+
         function drawManaTextAnimations() {
             manaTextAnimations.forEach(anim => {
                 ctx.save();
@@ -1070,6 +1264,22 @@
                 ctx.font = '48px Luckiest Guy, Arial';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
+                ctx.strokeText(anim.text, anim.x, anim.y);
+                ctx.fillText(anim.text, anim.x, anim.y);
+                ctx.restore();
+            });
+        }
+
+        function drawPenguinCountTextAnimations() {
+            penguinCountTextAnimations.forEach(anim => {
+                ctx.save();
+                ctx.globalAlpha = anim.life;
+                ctx.fillStyle = '#FFD700';
+                ctx.strokeStyle = '#000000';
+                ctx.lineWidth = 3;
+                ctx.font = '36px Luckiest Guy, Arial';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'alphabetic';
                 ctx.strokeText(anim.text, anim.x, anim.y);
                 ctx.fillText(anim.text, anim.x, anim.y);
                 ctx.restore();
@@ -1245,6 +1455,7 @@
                 const iglooHeight = 128;
 
                 ctx.save();
+                ctx.globalAlpha = 0.8;
                 ctx.translate(entrance.x, entrance.y);
                 ctx.scale(iglooScale, iglooScale);
                 ctx.drawImage(sprites.igloo, -iglooWidth / 2, -iglooHeight / 2, iglooWidth, iglooHeight);
@@ -1256,6 +1467,7 @@
                 const shipHeight = 128;
 
                 ctx.save();
+                ctx.globalAlpha = 0.8;
                 ctx.translate(exit.x, exit.y);
                 ctx.scale(exitScale, exitScale);
                 ctx.rotate(shipRotation);
@@ -1974,7 +2186,7 @@
             accumulatedTime = 0;
             lastFrameTime = 0;
             lastSpawnTime = 0;
-            currentLevel = 1;
+            currentLevel = STARTING_LEVEL;
             speedButton.pressed = false;
             gameSpeed = 1;
             currentSpell = 'blue';
@@ -1982,6 +2194,8 @@
             foamParticles = [];
             manaOrb = null;
             manaTextAnimations = [];
+            nappyPenguin = null;
+            penguinCountTextAnimations = [];
             gameOverButton.visible = false;
 
             generateTerrain();
@@ -2475,6 +2689,7 @@
             drawStaticTerrain();
             drawSea();
             drawManaOrb();
+            drawNappyPenguin();
 
             if (isDrawing && drawStart && drawCurrent && currentSpell === 'blue') {
                 const snappedLine = getSnappedLine(drawStart, drawCurrent);
@@ -2499,6 +2714,7 @@
 
             drawUI();
             drawManaTextAnimations();
+            drawPenguinCountTextAnimations();
             drawSpeedButton();
             drawSpellButtons();
         }
@@ -2638,7 +2854,9 @@
                 updateParticles();
                 updateSea(cappedDeltaTime);
                 updateManaOrb(cappedDeltaTime);
+                updateNappyPenguin(cappedDeltaTime);
                 updateManaTextAnimations();
+                updatePenguinCountTextAnimations();
             }
 
             lemmings = lemmings.filter(lemming => lemming.alive);

@@ -61,6 +61,9 @@
         terrainCanvas.height = canvas.height;
         const terrainCtx = terrainCanvas.getContext('2d');
 
+        // Testing constant - set to 1 for production
+        const STARTING_LEVEL = 1;
+
         let numPoints = 45;
         let terrainRatio = 0.4;
         let points = [];
@@ -79,12 +82,22 @@
 
         let levelTime = 240000;
         let gameStartTime = 0;
-        let currentLevel = 1;
+        let currentLevel = STARTING_LEVEL;
         let gameActive = true;
         let accumulatedTime = 0;
         let gameState = 'start';
         let levelCompleteBonus = 0;
         let currentHint = '';
+
+        // Mana orb state
+        let manaOrb = null;
+        let manaOrbScale = 1;
+        let manaTextAnimations = [];
+
+        // Nappy penguin state
+        let nappyPenguin = null;
+        let nappyPenguinScale = 1;
+        let penguinCountTextAnimations = [];
 
         const gameHints = [
             "Ending a level gives you mana. Earlier levels give more mana.",
@@ -96,18 +109,18 @@
 
         let gameSpeed = 1;
         let speedButton = {
-            width: 120,  // scaled up from 90
-            height: 80,  // scaled up from 60
+            width: 120,
+            height: 80,
             pressed: false,
             animationFrame: 0,
-            get x() { return canvas.width - this.width - 40; }, // margin from right
+            get x() { return canvas.width - this.width - 40; },
             get y() { return canvas.height - this.height - 30; }
         };
 
         let currentSpell = 'blue';
         const buttonRadius = 48;
-        const buttonSpacing = 140; // distance between button centers
-        const bottomY = canvas.height - 70; // vertical alignment
+        const buttonSpacing = 140;
+        const bottomY = canvas.height - 70;
 
         let spellButtons = [
             { spell: 'red', x: 260, y: bottomY, radius: buttonRadius, color: '#FF4444', name: 'Bomb' },
@@ -320,7 +333,9 @@
             ground_1: new Image(),
             ground_2: new Image(),
             ground_3: new Image(),
-            ground_4: new Image()
+            ground_4: new Image(),
+            mana_orb: new Image(),
+            pudgy_nappy: new Image()
         };
 
         sprites.igloo.src = BASE_URL + 'igloo.png';
@@ -337,9 +352,11 @@
         sprites.ground_2.src = BASE_URL + 'ground_2.png';
         sprites.ground_3.src = BASE_URL + 'ground_3.png';
         sprites.ground_4.src = BASE_URL + 'ground_4.png';
+        sprites.mana_orb.src = BASE_URL + 'mana_orb.png';
+        sprites.pudgy_nappy.src = BASE_URL + 'pudgy_nappy.png';
 
         let spritesLoaded = 0;
-        const totalSprites = 14;
+        const totalSprites = 16;
 
         function onSpriteLoad() {
             spritesLoaded++;
@@ -350,7 +367,6 @@
                     window.FarcadeSDK.singlePlayer.actions.ready();
                 }
 
-                // Initialize letterboxing AFTER game is set up
                 setTimeout(() => {
                     LPatternBackgroundSystem.init();
                 }, 100);
@@ -363,22 +379,18 @@
             const levelCycle = Math.floor((currentLevel - 1) / 4) % 4;
 
             if (levelCycle === 0) {
-                // Levels 1-4, 17-20, 33-36, etc.
                 groundPattern = terrainCtx.createPattern(sprites.ground_1, 'repeat');
                 currentOutlineColor = '#00AA00';
                 currentSkyColor = '#87CEEB';
             } else if (levelCycle === 1) {
-                // Levels 5-8, 21-24, 37-40, etc.
                 groundPattern = terrainCtx.createPattern(sprites.ground_2, 'repeat');
                 currentOutlineColor = '#9933FF';
                 currentSkyColor = '#f9ced9';
             } else if (levelCycle === 2) {
-                // Levels 9-12, 25-28, 41-44, etc.
                 groundPattern = terrainCtx.createPattern(sprites.ground_3, 'repeat');
                 currentOutlineColor = '#5B9BD5';
                 currentSkyColor = '#4716b7';
             } else {
-                // Levels 13-16, 29-32, 45-48, etc.
                 groundPattern = terrainCtx.createPattern(sprites.ground_4, 'repeat');
                 currentOutlineColor = '#A0826D';
                 currentSkyColor = '#c8fc8c';
@@ -399,6 +411,8 @@
         sprites.ground_2.onload = onSpriteLoad;
         sprites.ground_3.onload = onSpriteLoad;
         sprites.ground_4.onload = onSpriteLoad;
+        sprites.mana_orb.onload = onSpriteLoad;
+        sprites.pudgy_nappy.onload = onSpriteLoad;
 
         sprites.igloo.onerror = () => console.error('Failed to load igloo.png');
         sprites.ship.onerror = () => console.error('Failed to load ship.png');
@@ -414,6 +428,8 @@
         sprites.ground_2.onerror = () => console.error('Failed to load ground_2.png');
         sprites.ground_3.onerror = () => console.error('Failed to load ground_3.png');
         sprites.ground_4.onerror = () => console.error('Failed to load ground_4.png');
+        sprites.mana_orb.onerror = () => console.error('Failed to load mana_orb.png');
+        sprites.pudgy_nappy.onerror = () => console.error('Failed to load pudgy_nappy.png');
 
         function isSolidPixel(x, y) {
             x = Math.floor(x);
@@ -498,6 +514,32 @@
                 requestAnimationFrame(updateBob);
             }
             updateBob();
+        }
+
+        function pulseManaOrb() {
+            const startTime = Date.now();
+            const duration = 400;
+            const maxScale = 1.2;
+
+            function animate() {
+                const elapsed = Date.now() - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+
+                if (progress < 0.5) {
+                    const t = progress * 2;
+                    manaOrbScale = 1 + (maxScale - 1) * (1 - Math.pow(1 - t, 3));
+                } else {
+                    const t = (progress - 0.5) * 2;
+                    manaOrbScale = maxScale - (maxScale - 1) * (1 - Math.pow(1 - t, 3));
+                }
+
+                if (progress < 1) {
+                    requestAnimationFrame(animate);
+                } else {
+                    manaOrbScale = 1;
+                }
+            }
+            animate();
         }
 
         function pulseIgloo() {
@@ -666,6 +708,28 @@
                         this.x = canvas.width - this.width - 1;
                     }
                     this.lastAction = "hit boundary";
+                }
+
+                // Check mana orb collision
+                if (manaOrb && manaOrb.active) {
+                    const dx = (this.x + this.width / 2) - manaOrb.x;
+                    const dy = (this.y + this.height / 2) - manaOrb.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+
+                    if (distance < 40) {
+                        collectManaOrb();
+                    }
+                }
+
+                // Check nappy penguin collision
+                if (nappyPenguin && nappyPenguin.active) {
+                    const dx = (this.x + this.width / 2) - nappyPenguin.x;
+                    const dy = (this.y + this.height / 2) - (nappyPenguin.y + 40);
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+
+                    if (distance < 45) {
+                        wakeNappyPenguin();
+                    }
                 }
 
                 if (exit && this.distance(this.x + this.width / 2, this.y + this.height / 2, exit.x, exit.y) < 60) {
@@ -894,7 +958,332 @@
 
             drawTerrainOnly();
             findSpawnPoints();
+            spawnManaOrb();
+            spawnNappyPenguin();
             drawStaticTerrain();
+        }
+
+        function spawnManaOrb() {
+            manaOrb = null;
+
+            // Only spawn mana orb from level 9 onwards
+            if (currentLevel < 9) return;
+
+            const bottomUIZone = canvas.height - 110;
+            const attempts = 50;
+
+            for (let i = 0; i < attempts; i++) {
+                const x = 100 + Math.random() * (canvas.width - 200);
+                const y = 100 + Math.random() * (bottomUIZone - 200);
+
+                // Check if position is not inside terrain
+                const checkRadius = 30;
+                let validPosition = true;
+
+                for (let dx = -checkRadius; dx <= checkRadius; dx += 10) {
+                    for (let dy = -checkRadius; dy <= checkRadius; dy += 10) {
+                        if (Math.sqrt(dx * dx + dy * dy) <= checkRadius) {
+                            if (isSolidPixel(x + dx, y + dy)) {
+                                validPosition = false;
+                                break;
+                            }
+                        }
+                    }
+                    if (!validPosition) break;
+                }
+
+                if (validPosition) {
+                    manaOrb = {
+                        x: x,
+                        y: y,
+                        active: true,
+                        bobPhase: 0
+                    };
+                    break;
+                }
+            }
+        }
+
+        function spawnNappyPenguin() {
+            nappyPenguin = null;
+
+            // Only spawn nappy penguin from level 13 onwards
+            if (currentLevel < 13) return;
+
+            const surfacePoints = [];
+            const scanStep = 30;
+            const bottomSafeZone = canvas.height * 0.98;
+            const bottomUIZone = { minY: canvas.height - 110 };
+
+            for (let x = 80; x < canvas.width - 80; x += scanStep) {
+                for (let y = 100; y < bottomSafeZone; y += scanStep) {
+                    if (isTerrainAt(x, y)) {
+                        const hasSpaceAbove = !isTerrainAt(x, y - 50) && !isTerrainAt(x, y - 35);
+
+                        if (hasSpaceAbove) {
+                            const leftOk = isTerrainAt(x - scanStep, y) || isTerrainAt(x - scanStep, y + 12);
+                            const rightOk = isTerrainAt(x + scanStep, y) || isTerrainAt(x + scanStep, y + 12);
+                            const notInBottomUI = y < bottomUIZone.minY;
+
+                            if (leftOk && rightOk && notInBottomUI) {
+                                surfacePoints.push({ x, y });
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (surfacePoints.length > 0) {
+                const spawnSurface = surfacePoints[Math.floor(Math.random() * surfacePoints.length)];
+                nappyPenguin = {
+                    x: spawnSurface.x,
+                    y: spawnSurface.y - 45,
+                    active: true,
+                    breathPhase: 0,
+                    zPhase: 0
+                };
+            }
+        }
+
+        function collectManaOrb() {
+            if (!manaOrb || !manaOrb.active) return;
+
+            // Create particle burst
+            const numParticles = 20;
+            const colors = ['#00BFFF', '#0088FF', '#00DDFF', '#44DDFF', '#88EEFF'];
+
+            for (let i = 0; i < numParticles; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 2 + Math.random() * 2;
+                const color = colors[Math.floor(Math.random() * colors.length)];
+
+                particles.push({
+                    x: manaOrb.x,
+                    y: manaOrb.y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed - 1,
+                    life: 1.0,
+                    decay: 0.01 + Math.random() * 0.01,
+                    color: color
+                });
+            }
+
+            // Add mana
+            mana += 200;
+
+            // Create rising text animation
+            manaTextAnimations.push({
+                x: 100,
+                y: canvas.height - 120,
+                text: '+200',
+                life: 1.0,
+                startTime: Date.now()
+            });
+
+            // Pulse mana orb effect
+            pulseManaOrb();
+
+            // Deactivate orb
+            manaOrb.active = false;
+
+            // Trigger mana animation
+            manaAnimation.active = true;
+            manaAnimation.startTime = Date.now();
+        }
+
+        function wakeNappyPenguin() {
+            if (!nappyPenguin || !nappyPenguin.active) return;
+
+            // Create particle burst
+            const numParticles = 15;
+            const colors = ['#FFD700', '#FFA500', '#FF8C00', '#FFFF00', '#FFC700'];
+
+            for (let i = 0; i < numParticles; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 1.5 + Math.random() * 1.5;
+                const color = colors[Math.floor(Math.random() * colors.length)];
+
+                particles.push({
+                    x: nappyPenguin.x,
+                    y: nappyPenguin.y + 22,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed - 1,
+                    life: 1.0,
+                    decay: 0.01 + Math.random() * 0.01,
+                    color: color
+                });
+            }
+
+            // Spawn a new regular penguin at the nappy penguin's position
+            const newLemming = new Lemming(nappyPenguin.x - 12, nappyPenguin.y);
+            lemmings.push(newLemming);
+            maxLemmings++;
+            lemmingsSpawned++;
+
+            // Create falling text animation for penguin count
+            penguinCountTextAnimations.push({
+                x: 30,
+                y: 80,
+                text: '+1',
+                life: 1.0,
+                startTime: Date.now()
+            });
+
+            // Deactivate nappy penguin
+            nappyPenguin.active = false;
+        }
+
+        function updateManaOrb(deltaTime) {
+            if (!manaOrb || !manaOrb.active) return;
+
+            manaOrb.bobPhase += 0.05 * (deltaTime / 16.67);
+        }
+
+        function updateNappyPenguin(deltaTime) {
+            if (!nappyPenguin || !nappyPenguin.active) return;
+
+            // Breathing animation: pulse for 1 second, pause for 0.5 seconds
+            nappyPenguin.breathPhase += 0.0006 * deltaTime;
+            const breathCycle = nappyPenguin.breathPhase % 1.5;
+
+            if (breathCycle < 1.0) {
+                // Breathing in/out
+                nappyPenguinScale = 1 + Math.sin(breathCycle * Math.PI * 2) * 0.04;
+            } else {
+                // Pause
+                nappyPenguinScale = 1;
+            }
+
+            // Z animation cycle: 2 second cycle with 4 states (z, zZ, zZz, nothing)
+            nappyPenguin.zPhase += 0.0005 * deltaTime;
+        }
+
+        function drawManaOrb() {
+            if (!manaOrb || !manaOrb.active) return;
+
+            const bobOffset = Math.sin(manaOrb.bobPhase) * 8;
+            const orbSize = 48;
+
+            ctx.save();
+            ctx.translate(manaOrb.x, manaOrb.y + bobOffset);
+            ctx.scale(manaOrbScale, manaOrbScale);
+            ctx.drawImage(sprites.mana_orb, -orbSize / 2, -orbSize / 2, orbSize, orbSize);
+            ctx.restore();
+        }
+
+        function drawNappyPenguin() {
+            if (!nappyPenguin || !nappyPenguin.active) return;
+
+            const penguinWidth = 60;
+            const penguinHeight = 45;
+
+            // Draw sleeping penguin with breathing animation
+            ctx.save();
+            ctx.translate(nappyPenguin.x, nappyPenguin.y + penguinHeight / 2);
+            ctx.scale(nappyPenguinScale, nappyPenguinScale);
+            ctx.drawImage(sprites.pudgy_nappy, -penguinWidth / 2, -penguinHeight / 2, penguinWidth, penguinHeight);
+            ctx.restore();
+
+            // Draw Z's animation - 4 states over 2 seconds: z, zZ, zZz, (nothing)
+            const zCycle = (nappyPenguin.zPhase % 2); // 2 second cycle
+            const stateIndex = Math.floor(zCycle / 0.5); // 0, 1, 2, 3
+
+            if (stateIndex < 3) { // Only draw for first 3 states (z, zZ, zZz)
+                ctx.save();
+                ctx.fillStyle = '#FFFFFF';
+                ctx.strokeStyle = '#000000';
+                ctx.lineWidth = 2;
+                ctx.font = '28px Luckiest Guy, Arial';
+                ctx.textAlign = 'center';
+
+                let zText = '';
+                if (stateIndex === 0) zText = 'z';
+                else if (stateIndex === 1) zText = 'zZ';
+                else if (stateIndex === 2) zText = 'zZz';
+
+                const zX = nappyPenguin.x;
+                const zY = nappyPenguin.y - 10;
+                // Gentle bobbing motion - slower and less pronounced than mana orb
+                const zBob = Math.sin(nappyPenguin.zPhase * Math.PI) * 3;
+
+                // Fade in at start of each state, fade out at end
+                const stateProgress = (zCycle % 0.5) / 0.5;
+                let alpha;
+                if (stateProgress < 0.2) {
+                    alpha = stateProgress / 0.2; // Fade in
+                } else if (stateProgress > 0.8) {
+                    alpha = (1 - stateProgress) / 0.2; // Fade out
+                } else {
+                    alpha = 1; // Full opacity
+                }
+
+                ctx.globalAlpha = alpha * 0.9;
+                ctx.strokeText(zText, zX, zY + zBob);
+                ctx.fillText(zText, zX, zY + zBob);
+                ctx.restore();
+            }
+        }
+
+        function updateManaTextAnimations() {
+            const now = Date.now();
+
+            manaTextAnimations.forEach(anim => {
+                const elapsed = now - anim.startTime;
+                const duration = 1500;
+                const progress = elapsed / duration;
+
+                anim.life = 1 - progress;
+                anim.y -= 0.5;
+            });
+
+            manaTextAnimations = manaTextAnimations.filter(anim => anim.life > 0);
+        }
+
+        function updatePenguinCountTextAnimations() {
+            const now = Date.now();
+
+            penguinCountTextAnimations.forEach(anim => {
+                const elapsed = now - anim.startTime;
+                const duration = 1500;
+                const progress = elapsed / duration;
+
+                anim.life = 1 - progress;
+                anim.y += 0.5; // Fall down
+            });
+
+            penguinCountTextAnimations = penguinCountTextAnimations.filter(anim => anim.life > 0);
+        }
+
+        function drawManaTextAnimations() {
+            manaTextAnimations.forEach(anim => {
+                ctx.save();
+                ctx.globalAlpha = anim.life;
+                ctx.fillStyle = '#00BFFF';
+                ctx.strokeStyle = '#000000';
+                ctx.lineWidth = 3;
+                ctx.font = '48px Luckiest Guy, Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.strokeText(anim.text, anim.x, anim.y);
+                ctx.fillText(anim.text, anim.x, anim.y);
+                ctx.restore();
+            });
+        }
+
+        function drawPenguinCountTextAnimations() {
+            penguinCountTextAnimations.forEach(anim => {
+                ctx.save();
+                ctx.globalAlpha = anim.life;
+                ctx.fillStyle = '#FFD700';
+                ctx.strokeStyle = '#000000';
+                ctx.lineWidth = 3;
+                ctx.font = '36px Luckiest Guy, Arial';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'alphabetic';
+                ctx.strokeText(anim.text, anim.x, anim.y);
+                ctx.fillText(anim.text, anim.x, anim.y);
+                ctx.restore();
+            });
         }
 
         function drawTerrainOnly() {
@@ -968,8 +1357,11 @@
             const surfacePoints = [];
             const scanStep = 30;
             const bottomSafeZone = canvas.height * 0.98;
-
             const bottomUIZone = { minY: canvas.height - 110 };
+
+            // Level-based spawn constraints
+            const isEasyLevel = currentLevel <= 4;
+            const topHalfLimit = canvas.height * 0.5;
 
             for (let x = 80; x < canvas.width - 80; x += scanStep) {
                 for (let y = 100; y < bottomSafeZone; y += scanStep) {
@@ -979,7 +1371,6 @@
                         if (hasSpaceAbove) {
                             const leftOk = isTerrainAt(x - scanStep, y) || isTerrainAt(x - scanStep, y + 12);
                             const rightOk = isTerrainAt(x + scanStep, y) || isTerrainAt(x + scanStep, y + 12);
-
                             const notInBottomUI = y < bottomUIZone.minY;
 
                             if (leftOk && rightOk && notInBottomUI) {
@@ -991,28 +1382,65 @@
             }
 
             if (surfacePoints.length >= 2) {
-                surfacePoints.sort((a, b) => a.y - b.y);
+                // For levels 1-4: igloo in top 50%, ship in bottom 50%
+                if (isEasyLevel) {
+                    const topPoints = surfacePoints.filter(p => p.y < topHalfLimit);
+                    const bottomPoints = surfacePoints.filter(p => p.y >= topHalfLimit);
 
-                const entranceSurface = surfacePoints[Math.floor(Math.random() * surfacePoints.length)];
-                entrance = { x: entranceSurface.x, y: entranceSurface.y - 60 };
+                    if (topPoints.length > 0 && bottomPoints.length > 0) {
+                        const entranceSurface = topPoints[Math.floor(Math.random() * topPoints.length)];
+                        entrance = { x: entranceSurface.x, y: entranceSurface.y - 60 };
 
-                let validExits = surfacePoints.filter(p =>
-                    distance(p.x, p.y, entrance.x, entrance.y) > 300
-                );
+                        const exitSurface = bottomPoints[Math.floor(Math.random() * bottomPoints.length)];
+                        exit = { x: exitSurface.x, y: exitSurface.y - 60 };
+                    } else {
+                        // Fallback if constraints can't be met
+                        const entranceSurface = surfacePoints[Math.floor(Math.random() * surfacePoints.length)];
+                        entrance = { x: entranceSurface.x, y: entranceSurface.y - 60 };
 
-                if (validExits.length === 0) {
-                    validExits = surfacePoints.filter(p =>
-                        distance(p.x, p.y, entrance.x, entrance.y) > 200
-                    );
-                }
+                        let validExits = surfacePoints.filter(p =>
+                            distance(p.x, p.y, entrance.x, entrance.y) > 300
+                        );
 
-                if (validExits.length > 0) {
-                    const exitSurface = validExits[Math.floor(Math.random() * validExits.length)];
-                    exit = { x: exitSurface.x, y: exitSurface.y - 60 };
+                        if (validExits.length === 0) {
+                            validExits = surfacePoints.filter(p =>
+                                distance(p.x, p.y, entrance.x, entrance.y) > 200
+                            );
+                        }
+
+                        if (validExits.length > 0) {
+                            const exitSurface = validExits[Math.floor(Math.random() * validExits.length)];
+                            exit = { x: exitSurface.x, y: exitSurface.y - 60 };
+                        } else {
+                            exit = { x: surfacePoints[surfacePoints.length - 1].x, y: surfacePoints[surfacePoints.length - 1].y - 60 };
+                        }
+                    }
                 } else {
-                    exit = { x: surfacePoints[surfacePoints.length - 1].x, y: surfacePoints[surfacePoints.length - 1].y - 60 };
+                    // Normal spawning logic for level 5+
+                    surfacePoints.sort((a, b) => a.y - b.y);
+
+                    const entranceSurface = surfacePoints[Math.floor(Math.random() * surfacePoints.length)];
+                    entrance = { x: entranceSurface.x, y: entranceSurface.y - 60 };
+
+                    let validExits = surfacePoints.filter(p =>
+                        distance(p.x, p.y, entrance.x, entrance.y) > 300
+                    );
+
+                    if (validExits.length === 0) {
+                        validExits = surfacePoints.filter(p =>
+                            distance(p.x, p.y, entrance.x, entrance.y) > 200
+                        );
+                    }
+
+                    if (validExits.length > 0) {
+                        const exitSurface = validExits[Math.floor(Math.random() * validExits.length)];
+                        exit = { x: exitSurface.x, y: exitSurface.y - 60 };
+                    } else {
+                        exit = { x: surfacePoints[surfacePoints.length - 1].x, y: surfacePoints[surfacePoints.length - 1].y - 60 };
+                    }
                 }
             } else {
+                // Fallback when not enough surface points
                 const entranceY = 200 + Math.random() * 200;
                 const exitY = Math.min(bottomSafeZone - 150, canvas.height - 400) + Math.random() * 150;
 
@@ -1027,6 +1455,7 @@
                 const iglooHeight = 128;
 
                 ctx.save();
+                ctx.globalAlpha = 0.8;
                 ctx.translate(entrance.x, entrance.y);
                 ctx.scale(iglooScale, iglooScale);
                 ctx.drawImage(sprites.igloo, -iglooWidth / 2, -iglooHeight / 2, iglooWidth, iglooHeight);
@@ -1038,6 +1467,7 @@
                 const shipHeight = 128;
 
                 ctx.save();
+                ctx.globalAlpha = 0.8;
                 ctx.translate(exit.x, exit.y);
                 ctx.scale(exitScale, exitScale);
                 ctx.rotate(shipRotation);
@@ -1052,7 +1482,6 @@
 
             ctx.save();
 
-            // Always semi-transparent
             ctx.globalAlpha = 0.8;
 
             ctx.fillStyle = button.pressed ? '#4CAF50' : '#333';
@@ -1090,12 +1519,10 @@
             ctx.restore();
         }
 
-
         function drawSpellButtons() {
             spellButtons.forEach(button => {
                 ctx.save();
 
-                // Use a softer opacity difference
                 ctx.globalAlpha = currentSpell === button.spell ? 0.8 : 0.5;
 
                 ctx.fillStyle = button.color;
@@ -1103,7 +1530,6 @@
                 ctx.arc(button.x, button.y, button.radius, 0, 2 * Math.PI);
                 ctx.fill();
 
-                // Keep a visual highlight for the selected one
                 ctx.strokeStyle = currentSpell === button.spell ? '#FFD700' : '#fff';
                 ctx.lineWidth = currentSpell === button.spell ? 4 : 2;
                 ctx.stroke();
@@ -1111,7 +1537,6 @@
                 ctx.restore();
             });
         }
-
 
         function isPointInButton(x, y, button) {
             return x >= button.x && x <= button.x + button.width &&
@@ -1761,12 +2186,16 @@
             accumulatedTime = 0;
             lastFrameTime = 0;
             lastSpawnTime = 0;
-            currentLevel = 1;
+            currentLevel = STARTING_LEVEL;
             speedButton.pressed = false;
             gameSpeed = 1;
             currentSpell = 'blue';
             particles = [];
             foamParticles = [];
+            manaOrb = null;
+            manaTextAnimations = [];
+            nappyPenguin = null;
+            penguinCountTextAnimations = [];
             gameOverButton.visible = false;
 
             generateTerrain();
@@ -2108,11 +2537,9 @@
             const lineHeight = 36;
             let y = canvas.height / 2 + 50;
 
-            // Split by sentences (periods) and display each on its own line
             const sentences = currentHint.split('. ').filter(s => s.length > 0);
 
             sentences.forEach((sentence, index) => {
-                // Add period back if it's not the last sentence
                 const displayText = (index < sentences.length - 1 && !sentence.endsWith('.')) ? sentence + '.' : sentence;
                 ctx.strokeText(displayText, canvas.width / 2, y);
                 ctx.fillText(displayText, canvas.width / 2, y);
@@ -2175,7 +2602,6 @@
 
             const now = Date.now();
 
-            // --- Score pulse animation ---
             if (scoreAnimation.active) {
                 const elapsed = now - scoreAnimation.startTime;
                 const duration = 300;
@@ -2188,7 +2614,6 @@
                 }
             }
 
-            // --- Mana shake animation ---
             if (manaAnimation.active) {
                 const elapsed = now - manaAnimation.startTime;
                 const duration = 200;
@@ -2201,7 +2626,6 @@
                 }
             }
 
-            // --- Score (top center) ---
             ctx.save();
             ctx.translate(canvas.width / 2, 60);
             ctx.scale(scoreAnimation.scale, scoreAnimation.scale);
@@ -2214,7 +2638,6 @@
             ctx.fillText(`${score}`, 0, 0);
             ctx.restore();
 
-            // --- Timer (top right) ---
             ctx.fillStyle = '#FFFFFF';
             ctx.strokeStyle = '#000000';
             ctx.lineWidth = 3;
@@ -2229,17 +2652,15 @@
             ctx.strokeText(timeText, canvas.width - 30, 50);
             ctx.fillText(timeText, canvas.width - 30, 50);
 
-            // --- Penguin count (top left) ---
             ctx.textAlign = 'left';
             ctx.font = '40px Luckiest Guy, Arial';
             const penguinText = `${lemmingsSaved}/${lemmingsSpawned}`;
             ctx.strokeText(penguinText, 30, 50);
             ctx.fillText(penguinText, 30, 50);
 
-            // --- Mana (bottom-left corner, keeping your cyan style & shake) ---
             ctx.save();
             ctx.translate(100 + manaAnimation.shake, canvas.height - 60);
-            ctx.fillStyle = '#00BFFF'; // your original mana color
+            ctx.fillStyle = '#00BFFF';
             ctx.strokeStyle = '#000000';
             ctx.lineWidth = 3;
             ctx.font = '64px Luckiest Guy, Arial';
@@ -2251,7 +2672,6 @@
 
             ctx.restore();
         }
-
 
         function drawGame() {
             if (gameState === 'intermission') {
@@ -2268,6 +2688,8 @@
 
             drawStaticTerrain();
             drawSea();
+            drawManaOrb();
+            drawNappyPenguin();
 
             if (isDrawing && drawStart && drawCurrent && currentSpell === 'blue') {
                 const snappedLine = getSnappedLine(drawStart, drawCurrent);
@@ -2291,6 +2713,8 @@
             drawParticles();
 
             drawUI();
+            drawManaTextAnimations();
+            drawPenguinCountTextAnimations();
             drawSpeedButton();
             drawSpellButtons();
         }
@@ -2429,6 +2853,10 @@
                 lemmings.forEach(lemming => lemming.update(cappedDeltaTime));
                 updateParticles();
                 updateSea(cappedDeltaTime);
+                updateManaOrb(cappedDeltaTime);
+                updateNappyPenguin(cappedDeltaTime);
+                updateManaTextAnimations();
+                updatePenguinCountTextAnimations();
             }
 
             lemmings = lemmings.filter(lemming => lemming.alive);
@@ -2443,7 +2871,6 @@
         const TARGET_RATIO = 2 / 3;
         const EPSILON = 0.0001;
 
-        // L Pattern Background System - Clean implementation
         const LPatternBackgroundSystem = {
             patternCanvas: null,
             borderCanvas: null,
@@ -2548,38 +2975,28 @@
                 let xOffset;
                 let yOffset;
 
-                // --- 1. ASPECT RATIO SIZING ---
                 if (screenRatio >= TARGET_RATIO - EPSILON) {
-                    // Pillarbox/Near-Perfect 2:3 Logic
                     gameHeight = screenHeight;
                     gameWidth = gameHeight * TARGET_RATIO;
                     xOffset = (screenWidth - gameWidth) / 2;
                     yOffset = 0;
                 } else {
-                    // Letterbox Logic
                     gameWidth = screenWidth;
                     gameHeight = gameWidth / TARGET_RATIO;
                     xOffset = 0;
                     yOffset = (screenHeight - gameHeight) / 2;
                 }
 
-                // --- 2. CANVAS RECT CALCULATION (FINAL, TARGETED FIXES) ---
-
-                // A. Vertical Overlap (Fixes top/bottom lines, which previously worked)
                 const finalTop = Math.ceil(yOffset) - 1;
                 const finalHeight = Math.ceil(gameHeight) + 2;
 
-                // B. Horizontal Sizing and Overlap (Targeted Fix for the Right Line)
                 let finalLeft;
                 let finalWidth;
 
-                // CRITICAL FINAL FIX: If screen is near-perfect 2:3 (xOffset is near 0),
-                // force the canvas to start at 0 and extend 1px past the right edge.
                 if (Math.abs(xOffset) < EPSILON) {
-                    finalLeft = 0; // Starts exactly at the left edge
-                    finalWidth = window.innerWidth + 1; // Extends 1px past the right edge
+                    finalLeft = 0;
+                    finalWidth = window.innerWidth + 1;
                 } else {
-                    // For non-2:3 environments (Pillarbox/Letterbox), use the previous stable overlap logic.
                     finalLeft = Math.round(xOffset) - 1;
                     finalWidth = Math.ceil(gameWidth) + 2;
                 }
@@ -2589,13 +3006,10 @@
                     top: finalTop,
                     width: finalWidth,
                     height: finalHeight,
-
-                    // These are used for the border drawing logic.
                     right: Math.ceil(xOffset + gameWidth),
                     bottom: Math.ceil(yOffset + gameHeight),
                 };
 
-                // Update the game canvas style
                 const gameCanvas = document.getElementById('terrainCanvas');
                 if (gameCanvas) {
                     gameCanvas.style.width = rect.width + 'px';
@@ -2604,20 +3018,14 @@
                     gameCanvas.style.top = rect.top + 'px';
                 }
 
-                // --- 3. BORDER DRAWING ---
-
                 this.clearBorder();
 
-                // Only draw the explicit letterboxing border if the ratio is NOT near-perfect
                 if (screenRatio > TARGET_RATIO + EPSILON) {
-                    // Pillarbox: Draw left and right borders
                     this.drawGameBorder({ left: true, right: true, top: false, bottom: false });
                 } else if (screenRatio < TARGET_RATIO - EPSILON) {
-                    // Letterbox: Draw top and bottom borders
                     this.drawGameBorder({ top: true, bottom: true, left: false, right: false });
                 }
             },
-
 
             drawPattern: function () {
                 if (!this.patternCanvas) return;
@@ -2646,13 +3054,11 @@
                     for (let col = 0; col < cols; col++) {
                         const x = col * patternWidth - rowOffset;
 
-                        // Normal L
                         ctx.globalAlpha = alpha;
                         ctx.fillStyle = this.config.color;
                         ctx.fillRect(x, y, thickness, vHeight);
                         ctx.fillRect(x, y + vHeight - thickness, hWidth, thickness);
 
-                        // Inverted L
                         const ix = x + overlap;
                         ctx.fillRect(ix, y, hWidth, thickness);
                         ctx.fillRect(ix + hWidth - thickness, y, thickness, vHeight);

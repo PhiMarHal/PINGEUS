@@ -14,7 +14,14 @@ html = html.replace(
     '$1'
 );
 
+// Ensure STARTING_LEVEL is set to 1 for production
+html = html.replace(
+    /const STARTING_LEVEL = \d+;/,
+    'const STARTING_LEVEL = 1;'
+);
+
 fs.writeFileSync(outputFile, html);
 
 console.log(`✓ Created ${outputFile} with Farcade SDK enabled`);
+console.log('✓ STARTING_LEVEL set to 1 for production');
 console.log('Ready to deploy to Remix/Farcade!');
