@@ -96,19 +96,23 @@
 
         let gameSpeed = 1;
         let speedButton = {
-            x: canvas.width - 120,
-            y: canvas.height - 80,
-            width: 90,
-            height: 60,
+            width: 120,  // scaled up from 90
+            height: 80,  // scaled up from 60
             pressed: false,
-            animationFrame: 0
+            animationFrame: 0,
+            get x() { return canvas.width - this.width - 40; }, // margin from right
+            get y() { return canvas.height - this.height - 30; }
         };
 
         let currentSpell = 'blue';
+        const buttonRadius = 48;
+        const buttonSpacing = 140; // distance between button centers
+        const bottomY = canvas.height - 70; // vertical alignment
+
         let spellButtons = [
-            { spell: 'blue', x: 60, y: canvas.height - 50, radius: 35, color: '#0066FF', name: 'Ramp' },
-            { spell: 'red', x: 160, y: canvas.height - 50, radius: 35, color: '#FF4444', name: 'Bomb' },
-            { spell: 'purple', x: 260, y: canvas.height - 50, radius: 35, color: '#AA44FF', name: 'Wall' }
+            { spell: 'red', x: 260, y: bottomY, radius: buttonRadius, color: '#FF4444', name: 'Bomb' },
+            { spell: 'blue', x: 260 + buttonSpacing, y: bottomY, radius: buttonRadius, color: '#0066FF', name: 'Ramp' },
+            { spell: 'purple', x: 260 + buttonSpacing * 2, y: bottomY, radius: buttonRadius, color: '#AA44FF', name: 'Wall' }
         ];
 
         let isDrawing = false;
@@ -1047,6 +1051,10 @@
             const button = speedButton;
 
             ctx.save();
+
+            // Always semi-transparent
+            ctx.globalAlpha = 0.8;
+
             ctx.fillStyle = button.pressed ? '#4CAF50' : '#333';
             ctx.strokeStyle = '#fff';
             ctx.lineWidth = 2;
@@ -1068,11 +1076,7 @@
                 const startX = button.x + button.width / 2 - totalWidth / 2;
 
                 for (let i = 0; i < 3; i++) {
-                    if (i <= cycle) {
-                        ctx.fillStyle = '#FFD700';
-                    } else {
-                        ctx.fillStyle = '#666';
-                    }
+                    ctx.fillStyle = i <= cycle ? '#FFD700' : '#666';
                     ctx.fillText('>', startX + i * spacing, arrowY);
                 }
 
@@ -1086,15 +1090,20 @@
             ctx.restore();
         }
 
+
         function drawSpellButtons() {
             spellButtons.forEach(button => {
                 ctx.save();
+
+                // Use a softer opacity difference
+                ctx.globalAlpha = currentSpell === button.spell ? 0.8 : 0.5;
 
                 ctx.fillStyle = button.color;
                 ctx.beginPath();
                 ctx.arc(button.x, button.y, button.radius, 0, 2 * Math.PI);
                 ctx.fill();
 
+                // Keep a visual highlight for the selected one
                 ctx.strokeStyle = currentSpell === button.spell ? '#FFD700' : '#fff';
                 ctx.lineWidth = currentSpell === button.spell ? 4 : 2;
                 ctx.stroke();
@@ -1102,6 +1111,7 @@
                 ctx.restore();
             });
         }
+
 
         function isPointInButton(x, y, button) {
             return x >= button.x && x <= button.x + button.width &&
@@ -2165,6 +2175,7 @@
 
             const now = Date.now();
 
+            // --- Score pulse animation ---
             if (scoreAnimation.active) {
                 const elapsed = now - scoreAnimation.startTime;
                 const duration = 300;
@@ -2177,6 +2188,7 @@
                 }
             }
 
+            // --- Mana shake animation ---
             if (manaAnimation.active) {
                 const elapsed = now - manaAnimation.startTime;
                 const duration = 200;
@@ -2189,22 +2201,24 @@
                 }
             }
 
+            // --- Score (top center) ---
             ctx.save();
-            ctx.translate(canvas.width / 2, 55);
+            ctx.translate(canvas.width / 2, 60);
             ctx.scale(scoreAnimation.scale, scoreAnimation.scale);
             ctx.fillStyle = '#FFD700';
             ctx.strokeStyle = '#000000';
             ctx.lineWidth = 3;
-            ctx.font = '48px Luckiest Guy, Arial';
+            ctx.font = '64px Luckiest Guy, Arial';
             ctx.textAlign = 'center';
             ctx.strokeText(`${score}`, 0, 0);
             ctx.fillText(`${score}`, 0, 0);
             ctx.restore();
 
+            // --- Timer (top right) ---
             ctx.fillStyle = '#FFFFFF';
             ctx.strokeStyle = '#000000';
             ctx.lineWidth = 3;
-            ctx.font = '36px Luckiest Guy, Arial';
+            ctx.font = '48px Luckiest Guy, Arial';
             ctx.textAlign = 'right';
 
             const remainingTime = Math.max(0, levelTime - accumulatedTime);
@@ -2212,36 +2226,32 @@
             const seconds = Math.floor((remainingTime % 60000) / 1000);
             const timeText = `${minutes}:${seconds.toString().padStart(2, '0')}`;
 
-            ctx.strokeText(timeText, canvas.width - 20, 50);
-            ctx.fillText(timeText, canvas.width - 20, 50);
+            ctx.strokeText(timeText, canvas.width - 30, 50);
+            ctx.fillText(timeText, canvas.width - 30, 50);
 
+            // --- Penguin count (top left) ---
             ctx.textAlign = 'left';
-            ctx.font = '30px Luckiest Guy, Arial';
+            ctx.font = '40px Luckiest Guy, Arial';
             const penguinText = `${lemmingsSaved}/${lemmingsSpawned}`;
+            ctx.strokeText(penguinText, 30, 50);
+            ctx.fillText(penguinText, 30, 50);
 
-            ctx.strokeText(penguinText, 20, 50);
-            ctx.fillText(penguinText, 20, 50);
-
+            // --- Mana (bottom-left corner, keeping your cyan style & shake) ---
             ctx.save();
-            ctx.translate(canvas.width / 2 + manaAnimation.shake, canvas.height - 40);
-            ctx.fillStyle = '#00BFFF';
-            ctx.font = '48px Luckiest Guy, Arial';
+            ctx.translate(100 + manaAnimation.shake, canvas.height - 60);
+            ctx.fillStyle = '#00BFFF'; // your original mana color
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 3;
+            ctx.font = '64px Luckiest Guy, Arial';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.strokeText(`${mana}`, 0, 0);
             ctx.fillText(`${mana}`, 0, 0);
             ctx.restore();
 
-            if (gameSpeed > 1) {
-                ctx.textAlign = 'center';
-                ctx.font = '24px Luckiest Guy, Arial';
-                ctx.fillStyle = '#FFD700';
-                ctx.strokeText(`Speed: ${gameSpeed}x`, speedButton.x + speedButton.width / 2, speedButton.y - 10);
-                ctx.fillText(`Speed: ${gameSpeed}x`, speedButton.x + speedButton.width / 2, speedButton.y - 10);
-            }
-
             ctx.restore();
         }
+
 
         function drawGame() {
             if (gameState === 'intermission') {
