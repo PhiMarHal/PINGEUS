@@ -234,6 +234,10 @@
         let intermissionParticles = [];
         let foamParticles = [];
 
+        let fishes = [];
+        let lastFishSpawn = 0;
+        const FISH_SPAWN_INTERVAL = 10000; // 10 seconds
+
         let scoreAnimation = { active: false, scale: 1, startTime: 0 };
         let manaAnimation = { active: false, shake: 0, startTime: 0 };
 
@@ -440,7 +444,9 @@
             ground_3: new Image(),
             ground_4: new Image(),
             mana_orb: new Image(),
-            pudgy_nappy: new Image()
+            pudgy_nappy: new Image(),
+            fish_orange: new Image(),
+            fish_green: new Image()
         };
 
         sprites.igloo.src = BASE_URL + 'igloo.png';
@@ -459,9 +465,11 @@
         sprites.ground_4.src = BASE_URL + 'ground_4.png';
         sprites.mana_orb.src = BASE_URL + 'mana_orb.png';
         sprites.pudgy_nappy.src = BASE_URL + 'pudgy_nappy.png';
+        sprites.fish_orange.src = BASE_URL + 'fish_orange.png';
+        sprites.fish_green.src = BASE_URL + 'fish_green.png';
 
         let spritesLoaded = 0;
-        const totalSprites = 16;
+        const totalSprites = 18;
 
         function onSpriteLoad() {
             spritesLoaded++;
@@ -518,6 +526,8 @@
         sprites.ground_4.onload = onSpriteLoad;
         sprites.mana_orb.onload = onSpriteLoad;
         sprites.pudgy_nappy.onload = onSpriteLoad;
+        sprites.fish_orange.onload = onSpriteLoad;
+        sprites.fish_green.onload = onSpriteLoad;
 
         sprites.igloo.onerror = () => console.error('Failed to load igloo.png');
         sprites.ship.onerror = () => console.error('Failed to load ship.png');
@@ -535,6 +545,8 @@
         sprites.ground_4.onerror = () => console.error('Failed to load ground_4.png');
         sprites.mana_orb.onerror = () => console.error('Failed to load mana_orb.png');
         sprites.pudgy_nappy.onerror = () => console.error('Failed to load pudgy_nappy.png');
+        sprites.fish_orange.onerror = () => console.error('Failed to load fish_orange.png');
+        sprites.fish_green.onerror = () => console.error('Failed to load fish_green.png');
 
         function startShipSeaRocking() {
             const maxRotation = 4 * Math.PI / 180;
@@ -784,6 +796,13 @@
                     }
                 }
 
+                // Check fish collision
+                fishes.forEach(fish => {
+                    if (fish.checkCollisionWithLemming(this)) {
+                        collectFish(fish);
+                    }
+                });
+
                 if (exit && this.distance(this.x + this.width / 2, this.y + this.height / 2, exit.x, exit.y) < 60) {
                     this.alive = false;
                     lemmingsSaved++;
@@ -926,6 +945,113 @@
                 const currentSprite = walkSprites[currentFrame];
 
                 ctx.drawImage(currentSprite, this.x - offsetX, this.y - offsetY, spriteWidth, spriteHeight);
+
+                ctx.restore();
+            }
+        }
+
+        class Fish {
+            constructor() {
+                // Random type - orange or green
+                this.type = Math.random() < 0.5 ? 'orange' : 'green';
+                this.sprite = this.type === 'orange' ? sprites.fish_orange : sprites.fish_green;
+
+                // Random direction - true = right, false = left
+                this.movingRight = Math.random() < 0.5;
+
+                // Base speed to cross screen in ~15 seconds (will be multiplied by gameSpeed)
+                const speed = canvas.width / 15;
+                this.baseVx = this.movingRight ? speed : -speed;
+                this.vx = this.baseVx;
+
+                // Start position outside screen
+                this.x = this.movingRight ? -60 : canvas.width + 60;
+
+                // Sine wave that rises to surface
+                const seaTop = UI_ZONE_Y - 18;
+                const seaBottom = canvas.height;
+                const seaHeight = seaBottom - seaTop;
+
+                // Top of wave is close to surface
+                this.topY = seaTop + 8 + Math.random() * 8; // 8-16 pixels below surface
+                // Bottom varies - could be shallow or deep
+                this.bottomY = seaTop + seaHeight * (0.4 + Math.random() * 0.4);
+                this.waveAmplitude = (this.bottomY - this.topY) / 2;
+                this.centerY = this.topY + this.waveAmplitude;
+                this.y = this.centerY;
+
+                // Sine wave parameters
+                this.wavePhase = Math.random() * Math.PI * 2;
+                this.baseWaveSpeed = 0.002;
+                this.waveSpeed = this.baseWaveSpeed;
+
+                // Visual size
+                this.width = 48;
+                this.height = 36;
+
+                // Collision box (larger than visual)
+                this.collisionWidth = 64;
+                this.collisionHeight = 48;
+
+                this.active = true;
+                this.lastUpdateTime = performance.now();
+            }
+
+            update(deltaTime, currentGameSpeed) {
+                if (!this.active) return;
+
+                const dt = deltaTime / 1000;
+
+                // Update speed based on game speed
+                this.vx = this.baseVx * currentGameSpeed;
+                this.waveSpeed = this.baseWaveSpeed * currentGameSpeed;
+
+                // Horizontal movement
+                this.x += this.vx * dt;
+
+                // Sine wave vertical movement (oscillates between topY and bottomY)
+                this.wavePhase += this.waveSpeed * deltaTime;
+                this.y = this.centerY + Math.sin(this.wavePhase) * this.waveAmplitude;
+
+                // Check if off screen
+                if (this.movingRight && this.x > canvas.width + 60) {
+                    this.active = false;
+                } else if (!this.movingRight && this.x < -60) {
+                    this.active = false;
+                }
+            }
+
+            checkCollisionWithLemming(lemming) {
+                if (!this.active || !lemming.alive) return false;
+
+                // Use collision box dimensions for more lenient collision
+                const halfCollisionWidth = this.collisionWidth / 2;
+                const halfCollisionHeight = this.collisionHeight / 2;
+
+                const lemmingCenterX = lemming.x + lemming.width / 2;
+                const lemmingCenterY = lemming.y + lemming.height / 2;
+
+                // Check if lemming center is within fish collision box
+                return Math.abs(lemmingCenterX - this.x) < halfCollisionWidth &&
+                    Math.abs(lemmingCenterY - this.y) < halfCollisionHeight;
+            }
+
+            draw() {
+                if (!this.active) return;
+
+                ctx.save();
+
+                const drawWidth = this.width;
+                const drawHeight = this.height;
+
+                // Sprite is oriented right by default, flip if moving left
+                if (!this.movingRight) {
+                    ctx.translate(this.x + drawWidth / 2, this.y);
+                    ctx.scale(-1, 1);
+                    ctx.drawImage(this.sprite, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+                } else {
+                    ctx.drawImage(this.sprite, this.x - drawWidth / 2, this.y - drawHeight / 2, drawWidth, drawHeight);
+                }
 
                 ctx.restore();
             }
@@ -1184,6 +1310,51 @@
 
             // Deactivate nappy penguin
             nappyPenguin.active = false;
+        }
+
+        function collectFish(fish) {
+            if (!fish || !fish.active) return;
+
+            // Create particle burst
+            const numParticles = 12;
+            const colors = fish.type === 'orange'
+                ? ['#FFA500', '#FF8C00', '#FFB84D', '#FF9933']
+                : ['#00FF88', '#00DD77', '#33FFAA', '#00CC66'];
+
+            for (let i = 0; i < numParticles; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 1.5 + Math.random() * 1.5;
+                const color = colors[Math.floor(Math.random() * colors.length)];
+
+                particles.push({
+                    x: fish.x,
+                    y: fish.y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed - 1,
+                    life: 1.0,
+                    decay: 0.01 + Math.random() * 0.01,
+                    color: color
+                });
+            }
+
+            // Add mana
+            mana += 20;
+
+            // Create rising text animation at the fish position
+            manaTextAnimations.push({
+                x: fish.x,
+                y: fish.y,
+                text: '+20',
+                life: 1.0,
+                startTime: Date.now()
+            });
+
+            // Deactivate fish
+            fish.active = false;
+
+            // Trigger mana animation
+            manaAnimation.active = true;
+            manaAnimation.startTime = Date.now();
         }
 
         function updateManaOrb(deltaTime) {
@@ -2293,6 +2464,8 @@
             nappyPenguin = null;
             penguinCountTextAnimations = [];
             gameOverButton.visible = false;
+            fishes = [];
+            lastFishSpawn = 0;
 
             generateTerrain();
             gameStartTime = Date.now();
@@ -2783,6 +2956,10 @@
 
             drawStaticTerrain();
             drawSea();
+
+            // Draw fishes (behind penguins)
+            fishes.forEach(fish => fish.draw());
+
             drawManaOrb();
             drawNappyPenguin();
 
@@ -2870,6 +3047,9 @@
 
             intermissionButton.visible = false;
             intermissionParticles = [];
+
+            fishes = [];
+            lastFishSpawn = 0;
 
             generateTerrain();
 
@@ -2964,6 +3144,13 @@
                 lastSpawnTime = currentTime;
             }
 
+            // Spawn fish periodically (affected by game speed)
+            const adjustedFishSpawnInterval = FISH_SPAWN_INTERVAL / gameSpeed;
+            if (currentTime - lastFishSpawn > adjustedFishSpawnInterval) {
+                fishes.push(new Fish());
+                lastFishSpawn = currentTime;
+            }
+
             const updatesPerFrame = gameSpeed;
             for (let i = 0; i < updatesPerFrame; i++) {
                 lemmings.forEach(lemming => lemming.update(cappedDeltaTime));
@@ -2974,6 +3161,10 @@
                 updateManaTextAnimations();
                 updatePenguinCountTextAnimations();
             }
+
+            // Update fishes (affected by game speed)
+            fishes.forEach(fish => fish.update(cappedDeltaTime, gameSpeed));
+            fishes = fishes.filter(fish => fish.active);
 
             lemmings = lemmings.filter(lemming => lemming.alive);
 
