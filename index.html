@@ -301,6 +301,7 @@
         let currentAudio = null;
         let nextAudio = null;
         let musicEnabled = true;
+        let isMusicMuted = false;
         let nextTrackPreloadTimer = null;
 
         function shuffleArray(array) {
@@ -343,7 +344,7 @@
             }
 
             setTimeout(() => {
-                if (musicEnabled && currentAudio) {
+                if (musicEnabled && currentAudio && !isMusicMuted) {
                     currentAudio.volume = 0.7;
                     currentAudio.play().catch(err => console.log('Music play error:', err));
 
@@ -352,11 +353,17 @@
                         const nextTrackNumber = musicPlaylist[nextTrackIndex];
                         nextAudio = loadTrack(nextTrackNumber);
                     }, 60000);
+                } else if (isMusicMuted && currentAudio) {
+                    // Load the track but keep it paused when muted
+                    currentAudio.volume = 0.7;
+                    // Don't play it
                 }
             }, 4000);
 
             currentAudio.onended = () => {
-                playNextTrack();
+                if (!isMusicMuted) {
+                    playNextTrack();
+                }
             };
         }
 
@@ -368,7 +375,7 @@
             currentAudio = loadTrack(firstTrack);
 
             currentAudio.addEventListener('canplaythrough', () => {
-                if (musicEnabled) {
+                if (musicEnabled && !isMusicMuted) {
                     currentAudio.volume = 0.7;
                     currentAudio.play().catch(err => console.log('Music play error:', err));
 
@@ -381,7 +388,9 @@
             }, { once: true });
 
             currentAudio.onended = () => {
-                playNextTrack();
+                if (!isMusicMuted) {
+                    playNextTrack();
+                }
             };
         }
 
@@ -392,16 +401,15 @@
         }
 
         function resumeMusic() {
-            if (currentAudio && currentAudio.paused) {
+            if (currentAudio && currentAudio.paused && !isMusicMuted) {
                 currentAudio.play().catch(err => console.log('Music play error:', err));
             }
         }
 
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) {
-                pauseMusic();
+                // Only update start screen penguin spawning when hidden
             } else {
-                resumeMusic();
                 if (gameState === 'start') {
                     lastStartPenguinSpawn = performance.now();
                 }
@@ -2564,19 +2572,18 @@
             });
 
             window.FarcadeSDK.on('toggle_mute', (data) => {
+                isMusicMuted = data.isMuted;
+
                 if (data.isMuted) {
-                    if (currentAudio) {
-                        currentAudio.volume = 0;
-                    }
-                    if (nextAudio) {
-                        nextAudio.volume = 0;
+                    // Pause the music when muted
+                    if (currentAudio && !currentAudio.paused) {
+                        currentAudio.pause();
                     }
                 } else {
-                    if (currentAudio) {
+                    // Resume the music when unmuted (if window has focus)
+                    if (currentAudio && currentAudio.paused && !document.hidden) {
                         currentAudio.volume = 0.7;
-                    }
-                    if (nextAudio) {
-                        nextAudio.volume = 0.7;
+                        currentAudio.play().catch(err => console.log('Music play error:', err));
                     }
                 }
             });
