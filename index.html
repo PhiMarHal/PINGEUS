@@ -236,7 +236,7 @@
 
         let fishes = [];
         let lastFishSpawn = 0;
-        const FISH_SPAWN_INTERVAL = 10000; // 10 seconds
+        const FISH_SPAWN_INTERVAL = 20000;
 
         let scoreAnimation = { active: false, scale: 1, startTime: 0 };
         let manaAnimation = { active: false, shake: 0, startTime: 0 };
@@ -959,8 +959,8 @@
                 // Random direction - true = right, false = left
                 this.movingRight = Math.random() < 0.5;
 
-                // Base speed to cross screen in ~15 seconds (will be multiplied by gameSpeed)
-                const speed = canvas.width / 15;
+                // Base speed to cross screen (will be multiplied by gameSpeed)
+                const speed = canvas.width / 36;
                 this.baseVx = this.movingRight ? speed : -speed;
                 this.vx = this.baseVx;
 
