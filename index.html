@@ -56,174 +56,103 @@
         collisionCanvas.height = canvas.height;
         const collisionCtx = collisionCanvas.getContext('2d', { willReadFrequently: true });
 
-        const GRID_CELL_SIZE = 2;
-        let collisionGrid = null;
-        let gridWidth = 0;
-        let gridHeight = 0;
+        // Full-resolution collision cache
+        let collisionPixelCache = null;
 
-        // Initialize the collision grid
-        function initCollisionGrid() {
-            gridWidth = Math.ceil(canvas.width / GRID_CELL_SIZE);
-            gridHeight = Math.ceil(canvas.height / GRID_CELL_SIZE);
-            collisionGrid = new Uint8Array(gridWidth * gridHeight * 3); // 3 bytes per cell: solid, blue, purple
+        function updateCollisionCache() {
+            const imageData = collisionCtx.getImageData(0, 0, canvas.width, canvas.height);
+            collisionPixelCache = new Uint8ClampedArray(imageData.data);
         }
 
-        // Update the entire collision grid from the collision canvas
-        function updateCollisionGrid() {
-            if (!collisionGrid) return;
+        function updateCollisionCacheRegion(x, y, width, height) {
+            x = Math.max(0, Math.floor(x));
+            y = Math.max(0, Math.floor(y));
+            width = Math.min(canvas.width - x, Math.ceil(width));
+            height = Math.min(canvas.height - y, Math.ceil(height));
 
-            // Read the entire canvas once
-            const imageData = collisionCtx.getImageData(0, 0, canvas.width, canvas.height);
-            const data = imageData.data;
+            if (width <= 0 || height <= 0) return;
 
-            // Sample each grid cell
-            for (let gy = 0; gy < gridHeight; gy++) {
-                for (let gx = 0; gx < gridWidth; gx++) {
-                    const cellX = gx * GRID_CELL_SIZE;
-                    const cellY = gy * GRID_CELL_SIZE;
+            const imageData = collisionCtx.getImageData(x, y, width, height);
 
-                    let hasSolid = false;
-                    let hasBlue = false;
-                    let hasPurple = false;
+            for (let py = 0; py < height; py++) {
+                for (let px = 0; px < width; px++) {
+                    const srcIdx = (py * width + px) * 4;
+                    const destIdx = ((y + py) * canvas.width + (x + px)) * 4;
 
-                    // Sample center of cell
-                    const px = Math.min(cellX + GRID_CELL_SIZE / 2, canvas.width - 1);
-                    const py = Math.min(cellY + GRID_CELL_SIZE / 2, canvas.height - 1);
-                    const idx = (py * canvas.width + px) * 4;
-
-                    if (data[idx + 3] > 128) {
-                        hasSolid = true;
-
-                        // Check if it's blue ramp
-                        if (Math.abs(data[idx] - 0) <= 10 &&
-                            Math.abs(data[idx + 1] - 102) <= 10 &&
-                            Math.abs(data[idx + 2] - 255) <= 10) {
-                            hasBlue = true;
-                        }
-                        // Check if it's purple wall
-                        else if (Math.abs(data[idx] - 170) <= 10 &&
-                            Math.abs(data[idx + 1] - 68) <= 10 &&
-                            Math.abs(data[idx + 2] - 255) <= 10) {
-                            hasPurple = true;
-                        }
-                    }
-
-                    const gridIdx = (gy * gridWidth + gx) * 3;
-                    collisionGrid[gridIdx] = hasSolid ? 1 : 0;
-                    collisionGrid[gridIdx + 1] = hasBlue ? 1 : 0;
-                    collisionGrid[gridIdx + 2] = hasPurple ? 1 : 0;
+                    collisionPixelCache[destIdx] = imageData.data[srcIdx];
+                    collisionPixelCache[destIdx + 1] = imageData.data[srcIdx + 1];
+                    collisionPixelCache[destIdx + 2] = imageData.data[srcIdx + 2];
+                    collisionPixelCache[destIdx + 3] = imageData.data[srcIdx + 3];
                 }
             }
         }
 
-        // Fast grid-based collision checks
-        function isSolidPixelFast(x, y) {
+        function isSolidPixelCached(x, y) {
+            x = Math.floor(x);
+            y = Math.floor(y);
+
             if (x < 0 || x >= canvas.width || y < 0 || y >= canvas.height) {
                 return true;
             }
 
-            const gx = Math.floor(x / GRID_CELL_SIZE);
-            const gy = Math.floor(y / GRID_CELL_SIZE);
-
-            if (gx < 0 || gx >= gridWidth || gy < 0 || gy >= gridHeight) {
-                return true;
-            }
-
-            const gridIdx = (gy * gridWidth + gx) * 3;
-            return collisionGrid[gridIdx] === 1;
+            const idx = (y * canvas.width + x) * 4;
+            return collisionPixelCache[idx + 3] > 128;
         }
 
-        function isBlueRampFast(x, y) {
+        function isBlueRampCached(x, y) {
+            x = Math.floor(x);
+            y = Math.floor(y);
+
             if (x < 0 || x >= canvas.width || y < 0 || y >= canvas.height) {
                 return false;
             }
 
-            const gx = Math.floor(x / GRID_CELL_SIZE);
-            const gy = Math.floor(y / GRID_CELL_SIZE);
-
-            if (gx < 0 || gx >= gridWidth || gy < 0 || gy >= gridHeight) {
-                return false;
-            }
-
-            const gridIdx = (gy * gridWidth + gx) * 3;
-            return collisionGrid[gridIdx + 1] === 1;
+            const idx = (y * canvas.width + x) * 4;
+            return Math.abs(collisionPixelCache[idx] - 0) <= 10 &&
+                Math.abs(collisionPixelCache[idx + 1] - 102) <= 10 &&
+                Math.abs(collisionPixelCache[idx + 2] - 255) <= 10 &&
+                collisionPixelCache[idx + 3] > 128;
         }
 
-        function isPurpleWallFast(x, y) {
+        function isPurpleWallCached(x, y) {
+            x = Math.floor(x);
+            y = Math.floor(y);
+
             if (x < 0 || x >= canvas.width || y < 0 || y >= canvas.height) {
                 return false;
             }
 
-            const gx = Math.floor(x / GRID_CELL_SIZE);
-            const gy = Math.floor(y / GRID_CELL_SIZE);
-
-            if (gx < 0 || gx >= gridWidth || gy < 0 || gy >= gridHeight) {
-                return false;
-            }
-
-            const gridIdx = (gy * gridWidth + gx) * 3;
-            return collisionGrid[gridIdx + 2] === 1;
+            const idx = (y * canvas.width + x) * 4;
+            return Math.abs(collisionPixelCache[idx] - 170) <= 10 &&
+                Math.abs(collisionPixelCache[idx + 1] - 68) <= 10 &&
+                Math.abs(collisionPixelCache[idx + 2] - 255) <= 10 &&
+                collisionPixelCache[idx + 3] > 128;
         }
 
-        function isSolidIgnoringBlueRampsFast(x, y) {
-            if (!isSolidPixelFast(x, y)) return false;
-            if (isBlueRampFast(x, y)) return false;
+        function isSolidIgnoringBlueRampsCached(x, y) {
+            if (!isSolidPixelCached(x, y)) return false;
+            if (isBlueRampCached(x, y)) return false;
             return true;
         }
 
-        // Update the grid whenever terrain changes
-        function updateGridRegion(x, y, radius) {
-            // For Firefox optimization: only update affected grid cells
-            const minGx = Math.max(0, Math.floor((x - radius) / GRID_CELL_SIZE));
-            const maxGx = Math.min(gridWidth - 1, Math.ceil((x + radius) / GRID_CELL_SIZE));
-            const minGy = Math.max(0, Math.floor((y - radius) / GRID_CELL_SIZE));
-            const maxGy = Math.min(gridHeight - 1, Math.ceil((y + radius) / GRID_CELL_SIZE));
+        // Keep old functions for initialization only
+        function isSolidPixel(x, y) {
+            x = Math.floor(x);
+            y = Math.floor(y);
 
-            for (let gy = minGy; gy <= maxGy; gy++) {
-                for (let gx = minGx; gx <= maxGx; gx++) {
-                    const cellX = gx * GRID_CELL_SIZE;
-                    const cellY = gy * GRID_CELL_SIZE;
-
-                    // Sample center of cell using the OLD getImageData (only for updates)
-                    const px = Math.min(cellX + GRID_CELL_SIZE / 2, canvas.width - 1);
-                    const py = Math.min(cellY + GRID_CELL_SIZE / 2, canvas.height - 1);
-
-                    const imageData = collisionCtx.getImageData(px, py, 1, 1);
-                    const data = imageData.data;
-
-                    let hasSolid = false;
-                    let hasBlue = false;
-                    let hasPurple = false;
-
-                    if (data[3] > 128) {
-                        hasSolid = true;
-
-                        if (Math.abs(data[0] - 0) <= 10 &&
-                            Math.abs(data[1] - 102) <= 10 &&
-                            Math.abs(data[2] - 255) <= 10) {
-                            hasBlue = true;
-                        }
-                        else if (Math.abs(data[0] - 170) <= 10 &&
-                            Math.abs(data[1] - 68) <= 10 &&
-                            Math.abs(data[2] - 255) <= 10) {
-                            hasPurple = true;
-                        }
-                    }
-
-                    const gridIdx = (gy * gridWidth + gx) * 3;
-                    collisionGrid[gridIdx] = hasSolid ? 1 : 0;
-                    collisionGrid[gridIdx + 1] = hasBlue ? 1 : 0;
-                    collisionGrid[gridIdx + 2] = hasPurple ? 1 : 0;
-                }
+            if (x < 0 || x >= canvas.width || y < 0 || y >= canvas.height) {
+                return true;
             }
+
+            const imageData = collisionCtx.getImageData(x, y, 1, 1);
+            const data = imageData.data;
+            return data[3] > 128;
         }
 
         const terrainCanvas = document.createElement('canvas');
         terrainCanvas.width = canvas.width;
         terrainCanvas.height = canvas.height;
         const terrainCtx = terrainCanvas.getContext('2d');
-
-        initCollisionGrid();
 
         // Testing constant - set to 1 for production
         const STARTING_LEVEL = 1;
@@ -599,59 +528,6 @@
         sprites.mana_orb.onerror = () => console.error('Failed to load mana_orb.png');
         sprites.pudgy_nappy.onerror = () => console.error('Failed to load pudgy_nappy.png');
 
-        function isSolidPixel(x, y) {
-            x = Math.floor(x);
-            y = Math.floor(y);
-
-            if (x < 0 || x >= canvas.width || y < 0 || y >= canvas.height) {
-                return true;
-            }
-
-            const imageData = collisionCtx.getImageData(x, y, 1, 1);
-            const data = imageData.data;
-            return data[3] > 128;
-        }
-
-        function isBlueRamp(x, y) {
-            x = Math.floor(x);
-            y = Math.floor(y);
-
-            if (x < 0 || x >= canvas.width || y < 0 || y >= canvas.height) {
-                return false;
-            }
-
-            const imageData = collisionCtx.getImageData(x, y, 1, 1);
-            const data = imageData.data;
-
-            return Math.abs(data[0] - 0) <= 10 &&
-                Math.abs(data[1] - 102) <= 10 &&
-                Math.abs(data[2] - 255) <= 10 &&
-                data[3] > 128;
-        }
-
-        function isPurpleWall(x, y) {
-            x = Math.floor(x);
-            y = Math.floor(y);
-
-            if (x < 0 || x >= canvas.width || y < 0 || y >= canvas.height) {
-                return false;
-            }
-
-            const imageData = collisionCtx.getImageData(x, y, 1, 1);
-            const data = imageData.data;
-
-            return Math.abs(data[0] - 170) <= 10 &&
-                Math.abs(data[1] - 68) <= 10 &&
-                Math.abs(data[2] - 255) <= 10 &&
-                data[3] > 128;
-        }
-
-        function isSolidIgnoringBlueRamps(x, y) {
-            if (!isSolidPixelFast(x, y)) return false;
-            if (isBlueRampFast(x, y)) return false;
-            return true;
-        }
-
         function startShipSeaRocking() {
             const maxRotation = 4 * Math.PI / 180;
             const swayDuration = 3000;
@@ -803,11 +679,11 @@
 
                     this.x += this.vx * dt;
 
-                    if (isSolidPixelFast(groundCheckX, feetY - 20)) {
+                    if (isSolidPixelCached(groundCheckX, feetY - 20)) {
                         this.swimming = false;
                         this.vy = 0;
                         for (let checkY = feetY - 30; checkY <= feetY; checkY++) {
-                            if (isSolidPixelFast(groundCheckX, checkY)) {
+                            if (isSolidPixelCached(groundCheckX, checkY)) {
                                 this.y = checkY - this.height;
                                 break;
                             }
@@ -815,7 +691,7 @@
                     }
 
                     this.lastAction = "swimming";
-                } else if (!isSolidPixelFast(groundCheckX, feetY + 1)) {
+                } else if (!isSolidPixelCached(groundCheckX, feetY + 1)) {
                     this.vy += 10368 * dt;
                     this.vy = Math.min(this.vy, 1440);
 
@@ -830,13 +706,13 @@
                         const checkY = oldY + stepSize * step;
                         const checkFeetY = checkY + this.height;
 
-                        if (isSolidPixelFast(groundCheckX, checkFeetY)) {
+                        if (isSolidPixelCached(groundCheckX, checkFeetY)) {
                             this.y = checkY;
                             this.vy = 0;
                             landed = true;
 
                             for (let checkY2 = checkFeetY - 3; checkY2 <= checkFeetY + 3; checkY2++) {
-                                if (isSolidPixelFast(groundCheckX, checkY2)) {
+                                if (isSolidPixelCached(groundCheckX, checkY2)) {
                                     this.y = checkY2 - this.height;
                                     break;
                                 }
@@ -856,7 +732,7 @@
 
                     if (!this.justSteppedUp) {
                         for (let checkY = feetY - 3; checkY <= feetY + 3; checkY++) {
-                            if (isSolidPixelFast(groundCheckX, checkY)) {
+                            if (isSolidPixelCached(groundCheckX, checkY)) {
                                 this.y = checkY - this.height;
                                 break;
                             }
@@ -922,11 +798,11 @@
 
                 const wallCheckX = direction > 0 ? newX + this.width : newX;
 
-                if (isSolidIgnoringBlueRampsFast(wallCheckX, bodyY)) {
+                if (isSolidIgnoringBlueRampsCached(wallCheckX, bodyY)) {
                     const stepHeight = 16;
                     const stepUpY = feetY - stepHeight;
 
-                    if (!isSolidIgnoringBlueRampsFast(wallCheckX, stepUpY) && !isSolidIgnoringBlueRampsFast(wallCheckX, stepUpY - this.height)) {
+                    if (!isSolidIgnoringBlueRampsCached(wallCheckX, stepUpY) && !isSolidIgnoringBlueRampsCached(wallCheckX, stepUpY - this.height)) {
                         this.x = newX;
                         this.y -= stepHeight;
                         this.justSteppedUp = true;
@@ -1128,7 +1004,7 @@
             findSpawnPoints();
             spawnManaOrb();
             spawnNappyPenguin();
-            updateCollisionGrid();
+            updateCollisionCache();
             drawStaticTerrain();
         }
 
@@ -1152,7 +1028,7 @@
                 for (let dx = -checkRadius; dx <= checkRadius; dx += 10) {
                     for (let dy = -checkRadius; dy <= checkRadius; dy += 10) {
                         if (Math.sqrt(dx * dx + dy * dy) <= checkRadius) {
-                            if (isSolidPixelFast(x + dx, y + dy)) {
+                            if (isSolidPixelCached(x + dx, y + dy)) {
                                 validPosition = false;
                                 break;
                             }
@@ -1508,7 +1384,6 @@
                 terrainCtx.stroke();
                 terrainCtx.restore();
             });
-            updateCollisionGrid();
         }
 
         function drawStaticTerrain() {
@@ -1520,7 +1395,7 @@
 
         function isTerrainAt(x, y) {
             if (x < 0 || x >= collisionCanvas.width || y < 0 || y >= collisionCanvas.height) return false;
-            return isSolidPixelFast(x, y);
+            return isSolidPixel(x, y);
         }
 
         function findSpawnPoints() {
@@ -2102,13 +1977,16 @@
             }
             terrainCtx.stroke();
 
+            // Update collision cache for the drawn line
             const lineLength = Math.sqrt(
                 Math.pow(line[line.length - 1].x - line[0].x, 2) +
                 Math.pow(line[line.length - 1].y - line[0].y, 2)
             );
-            const centerX = (line[0].x + line[line.length - 1].x) / 2;
-            const centerY = (line[0].y + line[line.length - 1].y) / 2;
-            updateGridRegion(centerX, centerY, lineLength / 2 + 10);
+            const minX = Math.min(line[0].x, line[line.length - 1].x) - 10;
+            const minY = Math.min(line[0].y, line[line.length - 1].y) - 10;
+            const maxX = Math.max(line[0].x, line[line.length - 1].x) + 10;
+            const maxY = Math.max(line[0].y, line[line.length - 1].y) + 10;
+            updateCollisionCacheRegion(minX, minY, maxX - minX, maxY - minY);
         }
 
         function placePurpleWall(x, y) {
@@ -2130,7 +2008,6 @@
             const color = 'rgba(170, 68, 255, 255)';
             drawnLines.push({ line: wallLine, color: color });
             drawLine(wallLine, color);
-            updateGridRegion(x, y, 40);
 
             mana -= wallCost;
 
@@ -2221,7 +2098,8 @@
             terrainCtx.fill();
             terrainCtx.restore();
 
-            updateGridRegion(x, y, 50);
+            // Update collision cache for explosion area
+            updateCollisionCacheRegion(x - 50, y - 50, 100, 100);
         }
 
         function drawStartScreen() {
