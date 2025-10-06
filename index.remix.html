@@ -64,6 +64,10 @@
         // Testing constant - set to 1 for production
         const STARTING_LEVEL = 1;
 
+        // UI Zone - bottom 10% reserved for buttons
+        const UI_ZONE_PERCENT = 0.1;
+        const UI_ZONE_Y = canvas.height * (1 - UI_ZONE_PERCENT);
+
         let numPoints = 45;
         let terrainRatio = 0.4;
         let points = [];
@@ -621,17 +625,17 @@
                 const groundCheckX = this.x + this.width / 2 + (direction * this.width / 4);
                 const feetY = this.y + this.height;
 
-                if (feetY >= canvas.height) {
+                if (feetY >= UI_ZONE_Y) {
                     if (!this.swimming) {
                         this.swimming = true;
-                        this.y = canvas.height - this.height + 10;
+                        this.y = UI_ZONE_Y - this.height + 10;
                     }
                 }
 
                 if (this.swimming) {
                     this.bobPhase += 0.1 * (deltaTime / 16.67);
                     const bobOffset = Math.sin(this.bobPhase) * 5;
-                    this.y = canvas.height - this.height + 10 + bobOffset;
+                    this.y = UI_ZONE_Y - this.height + 10 + bobOffset;
 
                     this.x += this.vx * dt;
 
@@ -902,7 +906,7 @@
 
             updateTerrainVisuals();
 
-            const bottomSafeZone = canvas.height * 0.98;
+            const bottomSafeZone = UI_ZONE_Y - 50;
 
             for (let i = 0; i < points.length; i++) {
                 if (!points[i].isTerrain) continue;
@@ -969,7 +973,7 @@
             // Only spawn mana orb from level 9 onwards
             if (currentLevel < 9) return;
 
-            const bottomUIZone = canvas.height - 110;
+            const bottomUIZone = UI_ZONE_Y;
             const attempts = 50;
 
             for (let i = 0; i < attempts; i++) {
@@ -1012,8 +1016,8 @@
 
             const surfacePoints = [];
             const scanStep = 30;
-            const bottomSafeZone = canvas.height * 0.98;
-            const bottomUIZone = { minY: canvas.height - 110 };
+            const bottomSafeZone = UI_ZONE_Y - 50;
+            const bottomUIZone = { minY: UI_ZONE_Y };
 
             for (let x = 80; x < canvas.width - 80; x += scanStep) {
                 for (let y = 100; y < bottomSafeZone; y += scanStep) {
@@ -1356,8 +1360,8 @@
         function findSpawnPoints() {
             const surfacePoints = [];
             const scanStep = 30;
-            const bottomSafeZone = canvas.height * 0.98;
-            const bottomUIZone = { minY: canvas.height - 110 };
+            const bottomSafeZone = UI_ZONE_Y - 50;
+            const bottomUIZone = { minY: UI_ZONE_Y };
 
             // Level-based spawn constraints
             const isEasyLevel = currentLevel <= 4;
@@ -1442,7 +1446,7 @@
             } else {
                 // Fallback when not enough surface points
                 const entranceY = 200 + Math.random() * 200;
-                const exitY = Math.min(bottomSafeZone - 150, canvas.height - 400) + Math.random() * 150;
+                const exitY = Math.min(bottomSafeZone - 150, UI_ZONE_Y - 200) + Math.random() * 100;
 
                 entrance = { x: 160, y: entranceY - 50 };
                 exit = { x: canvas.width - 160, y: exitY - 50 };
@@ -1736,7 +1740,7 @@
             seaWaveOffset += 0.002 * deltaTime;
 
             if (Math.random() < 0.3) {
-                const seaY = canvas.height - 18;
+                const seaY = UI_ZONE_Y - 18;
                 const x = Math.random() * canvas.width;
 
                 const wave1 = Math.sin(x * 0.02 + seaWaveOffset) * 2;
@@ -1764,16 +1768,29 @@
 
         function drawSea() {
             const seaHeight = 18;
-            const seaY = canvas.height - seaHeight;
+            const seaY = UI_ZONE_Y - seaHeight;
 
             ctx.save();
 
+            // Main sea layer - with wavy bottom edge
             ctx.fillStyle = 'rgba(30, 100, 180, 0.85)';
             ctx.beginPath();
 
-            ctx.moveTo(0, canvas.height);
+            // Start from bottom right
+            ctx.moveTo(canvas.width, canvas.height);
+
+            // Draw wavy bottom edge (going backwards from right to left)
+            for (let x = canvas.width; x >= 0; x -= 2) {
+                const wave1 = Math.sin(x * 0.025 + seaWaveOffset * 1.5) * 3;
+                const wave2 = Math.sin(x * 0.018 - seaWaveOffset * 1.2) * 2;
+                const y = UI_ZONE_Y + 8 + wave1 + wave2; // 8px overlap
+                ctx.lineTo(x, y);
+            }
+
+            // Go up the left side
             ctx.lineTo(0, seaY);
 
+            // Draw wavy top edge
             for (let x = 0; x <= canvas.width; x += 2) {
                 const wave1 = Math.sin(x * 0.02 + seaWaveOffset) * 2;
                 const wave2 = Math.sin(x * 0.03 - seaWaveOffset * 1.5) * 1.5;
@@ -1782,15 +1799,30 @@
                 ctx.lineTo(x, y);
             }
 
+            // Close to bottom right
             ctx.lineTo(canvas.width, canvas.height);
             ctx.closePath();
             ctx.fill();
 
+            // Lighter wave layer - also with wavy bottom edge
             ctx.fillStyle = 'rgba(60, 140, 220, 0.4)';
             ctx.beginPath();
-            ctx.moveTo(0, canvas.height);
+
+            // Start from bottom right
+            ctx.moveTo(canvas.width, canvas.height);
+
+            // Draw wavy bottom edge (going backwards from right to left)
+            for (let x = canvas.width; x >= 0; x -= 2) {
+                const wave1 = Math.sin(x * 0.025 + seaWaveOffset * 1.5) * 3;
+                const wave2 = Math.sin(x * 0.018 - seaWaveOffset * 1.2) * 2;
+                const y = UI_ZONE_Y + 8 + wave1 + wave2; // Same 8px overlap
+                ctx.lineTo(x, y);
+            }
+
+            // Go up the left side
             ctx.lineTo(0, seaY + 4);
 
+            // Draw wavy top edge
             for (let x = 0; x <= canvas.width; x += 2) {
                 const wave1 = Math.sin(x * 0.025 - seaWaveOffset * 2) * 1.5;
                 const wave2 = Math.sin(x * 0.018 + seaWaveOffset * 1.2) * 1;
@@ -1798,6 +1830,7 @@
                 ctx.lineTo(x, y);
             }
 
+            // Close to bottom right
             ctx.lineTo(canvas.width, canvas.height);
             ctx.closePath();
             ctx.fill();
@@ -2710,6 +2743,27 @@
             }
 
             lemmings.forEach(lemming => lemming.draw());
+
+            // Draw UI zone background AFTER penguins - creates "underwater" effect with wavy top
+            ctx.save();
+            ctx.fillStyle = 'rgba(30, 100, 180, 0.85)';
+            ctx.beginPath();
+            ctx.moveTo(0, canvas.height);
+            ctx.lineTo(0, UI_ZONE_Y);
+
+            // Draw wavy top edge using sine waves
+            for (let x = 0; x <= canvas.width; x += 2) {
+                const wave1 = Math.sin(x * 0.025 + seaWaveOffset * 1.5) * 3;
+                const wave2 = Math.sin(x * 0.018 - seaWaveOffset * 1.2) * 2;
+                const y = UI_ZONE_Y + wave1 + wave2;
+                ctx.lineTo(x, y);
+            }
+
+            ctx.lineTo(canvas.width, canvas.height);
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+
             drawParticles();
 
             drawUI();
