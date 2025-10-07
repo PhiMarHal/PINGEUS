@@ -155,7 +155,7 @@
         const terrainCtx = terrainCanvas.getContext('2d');
 
         // Testing constant - set to 1 for production
-        const STARTING_LEVEL = 13;
+        const STARTING_LEVEL = 1;
 
         // UI Zone - bottom 10% reserved for buttons
         const UI_ZONE_PERCENT = 0.1;
@@ -3272,7 +3272,7 @@
 
             // Generate energy particles radiating from blowfish
             if (blowfish && blowfish.active && !blowfish.collected) {
-                if (currentTime - blowfish.lastParticleTime > 250 / gameSpeed) {
+                if (currentTime - blowfish.lastParticleTime > 100 / gameSpeed) {
                     blowfish.lastParticleTime = currentTime;
                     const angle = Math.random() * Math.PI * 2;
                     const speed = 0.075 + Math.random() * 0.125;
@@ -3284,8 +3284,8 @@
                         y: blowfish.y,
                         vx: Math.cos(angle) * speed,
                         vy: Math.sin(angle) * speed,
-                        life: 0.5,
-                        decay: 0.002,
+                        life: 1.0,
+                        decay: 0.003,
                         color: color,
                         noGravity: true
                     });
