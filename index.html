@@ -155,7 +155,7 @@
         const terrainCtx = terrainCanvas.getContext('2d');
 
         // Testing constant - set to 1 for production
-        const STARTING_LEVEL = 1;
+        const STARTING_LEVEL = 13;
 
         // UI Zone - bottom 10% reserved for buttons
         const UI_ZONE_PERCENT = 0.1;
@@ -240,6 +240,12 @@
         let fishEatenThisLevel = 0;
         const MAX_FISH_PER_LEVEL = 4;
 
+        let blowfish = null;
+        let blowfishSpawnTime = 0;
+        let blowfishHasSpawned = false;
+        let blowfishScale = 1;
+        let blowfishAlpha = 1;
+
         let scoreAnimation = { active: false, scale: 1, startTime: 0 };
         let manaAnimation = { active: false, shake: 0, startTime: 0 };
 
@@ -310,6 +316,51 @@
         let isMusicMuted = false;
         let nextTrackPreloadTimer = null;
 
+        // ===== HELPER FUNCTIONS =====
+
+        // Helper: Draw text with stroke and fill
+        function drawStrokedText(text, x, y, fillColor = '#FFFFFF', strokeColor = '#000000', strokeWidth = 3) {
+            ctx.strokeStyle = strokeColor;
+            ctx.lineWidth = strokeWidth;
+            ctx.fillStyle = fillColor;
+            ctx.strokeText(text, x, y);
+            ctx.fillText(text, x, y);
+        }
+
+        // Helper: Calculate sine wave position for swimming entities
+        function calculateSineWaveY(centerY, amplitude, phase) {
+            return centerY + Math.sin(phase) * amplitude;
+        }
+
+        // Helper: Check collision between entity and lemming
+        function checkEntityLemmingCollision(entityX, entityY, collisionWidth, collisionHeight, lemming) {
+            if (!lemming.alive) return false;
+
+            const halfCollisionWidth = collisionWidth / 2;
+            const halfCollisionHeight = collisionHeight / 2;
+            const lemmingCenterX = lemming.x + lemming.width / 2;
+            const lemmingCenterY = lemming.y + lemming.height / 2;
+
+            return Math.abs(lemmingCenterX - entityX) < halfCollisionWidth &&
+                Math.abs(lemmingCenterY - entityY) < halfCollisionHeight;
+        }
+
+        // Helper: Update sine wave swimming entity
+        function updateSineWaveMovement(entity, deltaTime, gameSpeed) {
+            const dt = deltaTime / 1000;
+
+            // Update horizontal speed based on game speed
+            entity.vx = entity.baseVx * gameSpeed;
+            entity.waveSpeed = entity.baseWaveSpeed * gameSpeed;
+
+            // Horizontal movement
+            entity.x += entity.vx * dt;
+
+            // Sine wave vertical movement
+            entity.wavePhase += entity.waveSpeed * deltaTime;
+            entity.y = calculateSineWaveY(entity.centerY, entity.waveAmplitude, entity.wavePhase);
+        }
+
         function shuffleArray(array) {
             const shuffled = [...array];
             for (let i = shuffled.length - 1; i > 0; i--) {
@@ -360,9 +411,7 @@
                         nextAudio = loadTrack(nextTrackNumber);
                     }, 60000);
                 } else if (isMusicMuted && currentAudio) {
-                    // Load the track but keep it paused when muted
                     currentAudio.volume = 0.7;
-                    // Don't play it
                 }
             }, 4000);
 
@@ -448,7 +497,8 @@
             mana_orb: new Image(),
             pudgy_nappy: new Image(),
             fish_orange: new Image(),
-            fish_green: new Image()
+            fish_green: new Image(),
+            fish_blowfish: new Image()
         };
 
         sprites.igloo.src = BASE_URL + 'igloo.png';
@@ -469,9 +519,10 @@
         sprites.pudgy_nappy.src = BASE_URL + 'pudgy_nappy.png';
         sprites.fish_orange.src = BASE_URL + 'fish_orange.png';
         sprites.fish_green.src = BASE_URL + 'fish_green.png';
+        sprites.fish_blowfish.src = BASE_URL + 'fish_blowfish.png';
 
         let spritesLoaded = 0;
-        const totalSprites = 18;
+        const totalSprites = 19;
 
         function onSpriteLoad() {
             spritesLoaded++;
@@ -530,6 +581,7 @@
         sprites.pudgy_nappy.onload = onSpriteLoad;
         sprites.fish_orange.onload = onSpriteLoad;
         sprites.fish_green.onload = onSpriteLoad;
+        sprites.fish_blowfish.onload = onSpriteLoad;
 
         sprites.igloo.onerror = () => console.error('Failed to load igloo.png');
         sprites.ship.onerror = () => console.error('Failed to load ship.png');
@@ -549,6 +601,7 @@
         sprites.pudgy_nappy.onerror = () => console.error('Failed to load pudgy_nappy.png');
         sprites.fish_orange.onerror = () => console.error('Failed to load fish_orange.png');
         sprites.fish_green.onerror = () => console.error('Failed to load fish_green.png');
+        sprites.fish_blowfish.onerror = () => console.error('Failed to load fish_blowfish.png');
 
         function startShipSeaRocking() {
             const maxRotation = 4 * Math.PI / 180;
@@ -805,6 +858,11 @@
                     }
                 });
 
+                // Check blowfish collision
+                if (blowfish && blowfish.checkCollisionWithLemming(this)) {
+                    collectBlowfish();
+                }
+
                 if (exit && this.distance(this.x + this.width / 2, this.y + this.height / 2, exit.x, exit.y) < 60) {
                     this.alive = false;
                     lemmingsSaved++;
@@ -954,44 +1012,34 @@
 
         class Fish {
             constructor() {
-                // Random type - orange or green
                 this.type = Math.random() < 0.5 ? 'orange' : 'green';
                 this.sprite = this.type === 'orange' ? sprites.fish_orange : sprites.fish_green;
 
-                // Random direction - true = right, false = left
                 this.movingRight = Math.random() < 0.5;
 
-                // Base speed to cross screen in ~15 seconds (will be multiplied by gameSpeed)
                 const speed = canvas.width / 15;
                 this.baseVx = this.movingRight ? speed : -speed;
                 this.vx = this.baseVx;
 
-                // Start position outside screen
                 this.x = this.movingRight ? -60 : canvas.width + 60;
 
-                // Sine wave that rises to surface
                 const seaTop = UI_ZONE_Y - 18;
                 const seaBottom = canvas.height;
                 const seaHeight = seaBottom - seaTop;
 
-                // Top of wave is close to surface
-                this.topY = seaTop + 8 + Math.random() * 8; // 8-16 pixels below surface
-                // Bottom varies - could be shallow or deep
+                this.topY = seaTop + 8 + Math.random() * 8;
                 this.bottomY = seaTop + seaHeight * (0.4 + Math.random() * 0.4);
                 this.waveAmplitude = (this.bottomY - this.topY) / 2;
                 this.centerY = this.topY + this.waveAmplitude;
                 this.y = this.centerY;
 
-                // Sine wave parameters
                 this.wavePhase = Math.random() * Math.PI * 2;
                 this.baseWaveSpeed = 0.002;
                 this.waveSpeed = this.baseWaveSpeed;
 
-                // Visual size
                 this.width = 48;
                 this.height = 36;
 
-                // Collision box (larger than visual)
                 this.collisionWidth = 64;
                 this.collisionHeight = 48;
 
@@ -1002,18 +1050,7 @@
             update(deltaTime, currentGameSpeed) {
                 if (!this.active) return;
 
-                const dt = deltaTime / 1000;
-
-                // Update speed based on game speed
-                this.vx = this.baseVx * currentGameSpeed;
-                this.waveSpeed = this.baseWaveSpeed * currentGameSpeed;
-
-                // Horizontal movement
-                this.x += this.vx * dt;
-
-                // Sine wave vertical movement (oscillates between topY and bottomY)
-                this.wavePhase += this.waveSpeed * deltaTime;
-                this.y = this.centerY + Math.sin(this.wavePhase) * this.waveAmplitude;
+                updateSineWaveMovement(this, deltaTime, currentGameSpeed);
 
                 // Check if off screen
                 if (this.movingRight && this.x > canvas.width + 60) {
@@ -1024,18 +1061,8 @@
             }
 
             checkCollisionWithLemming(lemming) {
-                if (!this.active || !lemming.alive) return false;
-
-                // Use collision box dimensions for more lenient collision
-                const halfCollisionWidth = this.collisionWidth / 2;
-                const halfCollisionHeight = this.collisionHeight / 2;
-
-                const lemmingCenterX = lemming.x + lemming.width / 2;
-                const lemmingCenterY = lemming.y + lemming.height / 2;
-
-                // Check if lemming center is within fish collision box
-                return Math.abs(lemmingCenterX - this.x) < halfCollisionWidth &&
-                    Math.abs(lemmingCenterY - this.y) < halfCollisionHeight;
+                if (!this.active) return false;
+                return checkEntityLemmingCollision(this.x, this.y, this.collisionWidth, this.collisionHeight, lemming);
             }
 
             draw() {
@@ -1046,7 +1073,6 @@
                 const drawWidth = this.width;
                 const drawHeight = this.height;
 
-                // Sprite is oriented right by default, flip if moving left
                 if (!this.movingRight) {
                     ctx.translate(this.x + drawWidth / 2, this.y);
                     ctx.scale(-1, 1);
@@ -1057,6 +1083,109 @@
 
                 ctx.restore();
             }
+        }
+
+        class Blowfish {
+            constructor() {
+                this.sprite = sprites.fish_blowfish;
+
+                this.movingRight = Math.random() < 0.5;
+
+                this.baseSpeed = canvas.width / 25;
+
+                this.x = this.movingRight ? 80 : canvas.width - 80;
+
+                const seaTop = UI_ZONE_Y - 18;
+                const seaBottom = canvas.height;
+                const seaHeight = seaBottom - seaTop;
+
+                this.topY = seaTop + 8 + Math.random() * 8;
+                this.bottomY = seaTop + seaHeight * (0.4 + Math.random() * 0.4);
+                this.waveAmplitude = (this.bottomY - this.topY) / 2;
+                this.centerY = this.topY + this.waveAmplitude;
+                this.y = this.centerY;
+
+                this.wavePhase = Math.random() * Math.PI * 2;
+                this.baseWaveSpeed = 0.0015;
+
+                // Calculate vx and waveSpeed based on direction
+                this.baseVx = this.movingRight ? this.baseSpeed : -this.baseSpeed;
+                this.vx = this.baseVx;
+                this.waveSpeed = this.baseWaveSpeed;
+
+                this.width = 60;
+                this.height = 45;
+
+                this.collisionWidth = 70;
+                this.collisionHeight = 55;
+
+                this.active = true;
+                this.collected = false;
+                this.lastParticleTime = 0;
+            }
+
+            update(deltaTime, currentGameSpeed) {
+                if (!this.active) return;
+
+                const dt = deltaTime / 1000;
+
+                // Update speed based on current direction
+                this.baseVx = this.movingRight ? this.baseSpeed : -this.baseSpeed;
+
+                updateSineWaveMovement(this, deltaTime, currentGameSpeed);
+
+                // Check bounds and reverse direction
+                if (this.x <= 80) {
+                    this.x = 80;
+                    this.movingRight = true;
+                } else if (this.x >= canvas.width - 80) {
+                    this.x = canvas.width - 80;
+                    this.movingRight = false;
+                }
+            }
+
+            checkCollisionWithLemming(lemming) {
+                if (!this.active || this.collected) return false;
+                return checkEntityLemmingCollision(this.x, this.y, this.collisionWidth, this.collisionHeight, lemming);
+            }
+
+            draw() {
+                if (!this.active) return;
+
+                ctx.save();
+
+                ctx.globalAlpha = blowfishAlpha;
+
+                const drawWidth = this.width * blowfishScale;
+                const drawHeight = this.height * blowfishScale;
+
+                if (!this.movingRight) {
+                    ctx.translate(this.x + drawWidth / 2, this.y);
+                    ctx.scale(-1, 1);
+                    ctx.drawImage(this.sprite, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+                } else {
+                    ctx.drawImage(this.sprite, this.x - drawWidth / 2, this.y - drawHeight / 2, drawWidth, drawHeight);
+                }
+
+                ctx.restore();
+            }
+        }
+
+        function createEmanatingParticle(x, y, colorPalette) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = 0.3 + Math.random() * 0.4;
+            const color = colorPalette[Math.floor(Math.random() * colorPalette.length)];
+
+            particles.push({
+                x: x,
+                y: y,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                life: 1.0,
+                decay: 0.006 + Math.random() * 0.004,
+                color: color,
+                noGravity: true
+            });
         }
 
         function generatePoints() {
@@ -1137,17 +1266,16 @@
             }
 
             drawTerrainOnly();
+            updateCollisionCache();
             findSpawnPoints();
             spawnManaOrb();
             spawnNappyPenguin();
-            updateCollisionCache();
             drawStaticTerrain();
         }
 
         function spawnManaOrb() {
             manaOrb = null;
 
-            // Only spawn mana orb from level 9 onwards
             if (currentLevel < 9) return;
 
             const bottomUIZone = UI_ZONE_Y;
@@ -1157,7 +1285,6 @@
                 const x = 100 + Math.random() * (canvas.width - 200);
                 const y = 100 + Math.random() * (bottomUIZone - 200);
 
-                // Check if position is not inside terrain
                 const checkRadius = 30;
                 let validPosition = true;
 
@@ -1188,7 +1315,6 @@
         function spawnNappyPenguin() {
             nappyPenguin = null;
 
-            // Only spawn nappy penguin from level 13 onwards
             if (currentLevel < 13) return;
 
             const surfacePoints = [];
@@ -1229,7 +1355,6 @@
         function collectManaOrb() {
             if (!manaOrb || !manaOrb.active) return;
 
-            // Create particle burst
             const numParticles = 20;
             const colors = ['#00BFFF', '#0088FF', '#00DDFF', '#44DDFF', '#88EEFF'];
 
@@ -1249,10 +1374,8 @@
                 });
             }
 
-            // Add mana
             mana += 200;
 
-            // Create rising text animation
             manaTextAnimations.push({
                 x: 100,
                 y: canvas.height - 120,
@@ -1261,13 +1384,10 @@
                 startTime: Date.now()
             });
 
-            // Pulse mana orb effect
             pulseManaOrb();
 
-            // Deactivate orb
             manaOrb.active = false;
 
-            // Trigger mana animation
             manaAnimation.active = true;
             manaAnimation.startTime = Date.now();
         }
@@ -1275,7 +1395,6 @@
         function wakeNappyPenguin() {
             if (!nappyPenguin || !nappyPenguin.active) return;
 
-            // Create particle burst
             const numParticles = 15;
             const colors = ['#FFD700', '#FFA500', '#FF8C00', '#FFFF00', '#FFC700'];
 
@@ -1295,13 +1414,11 @@
                 });
             }
 
-            // Spawn a new regular penguin at the nappy penguin's position
             const newLemming = new Lemming(nappyPenguin.x - 12, nappyPenguin.y);
             lemmings.push(newLemming);
             maxLemmings++;
             lemmingsSpawned++;
 
-            // Create falling text animation for penguin count
             penguinCountTextAnimations.push({
                 x: 30,
                 y: 80,
@@ -1310,14 +1427,12 @@
                 startTime: Date.now()
             });
 
-            // Deactivate nappy penguin
             nappyPenguin.active = false;
         }
 
         function collectFish(fish) {
             if (!fish || !fish.active) return;
 
-            // Create particle burst
             const numParticles = 12;
             const colors = fish.type === 'orange'
                 ? ['#FFA500', '#FF8C00', '#FFB84D', '#FF9933']
@@ -1339,10 +1454,8 @@
                 });
             }
 
-            // Add mana
             mana += 40;
 
-            // Create rising text animation at the fish position
             manaTextAnimations.push({
                 x: fish.x,
                 y: fish.y,
@@ -1351,13 +1464,68 @@
                 startTime: Date.now()
             });
 
-            // Increment fish eaten counter
             fishEatenThisLevel++;
 
-            // Deactivate fish
             fish.active = false;
 
-            // Trigger mana animation
+            manaAnimation.active = true;
+            manaAnimation.startTime = Date.now();
+        }
+
+        function collectBlowfish() {
+            if (!blowfish || !blowfish.active || blowfish.collected) return;
+
+            blowfish.collected = true;
+
+            const numParticles = 25;
+            const colors = ['#FFD700', '#FFA500', '#FFFF00', '#FFB84D', '#FFC700'];
+
+            for (let i = 0; i < numParticles; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 2 + Math.random() * 2;
+                const color = colors[Math.floor(Math.random() * colors.length)];
+
+                particles.push({
+                    x: blowfish.x,
+                    y: blowfish.y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed - 1,
+                    life: 1.0,
+                    decay: 0.008 + Math.random() * 0.008,
+                    color: color
+                });
+            }
+
+            mana += 200;
+
+            manaTextAnimations.push({
+                x: blowfish.x,
+                y: blowfish.y,
+                text: '+200',
+                life: 1.0,
+                startTime: Date.now()
+            });
+
+            const startTime = Date.now();
+            const duration = 600;
+
+            function animate() {
+                const elapsed = Date.now() - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+
+                blowfishScale = 1 + progress * 0.5;
+                blowfishAlpha = 1 - progress;
+
+                if (progress < 1) {
+                    requestAnimationFrame(animate);
+                } else {
+                    blowfish.active = false;
+                    blowfishScale = 1;
+                    blowfishAlpha = 1;
+                }
+            }
+            animate();
+
             manaAnimation.active = true;
             manaAnimation.startTime = Date.now();
         }
@@ -1371,19 +1539,15 @@
         function updateNappyPenguin(deltaTime) {
             if (!nappyPenguin || !nappyPenguin.active) return;
 
-            // Breathing animation: pulse for 1 second, pause for 0.5 seconds
             nappyPenguin.breathPhase += 0.0006 * deltaTime;
             const breathCycle = nappyPenguin.breathPhase % 1.5;
 
             if (breathCycle < 1.0) {
-                // Breathing in/out
                 nappyPenguinScale = 1 + Math.sin(breathCycle * Math.PI * 2) * 0.04;
             } else {
-                // Pause
                 nappyPenguinScale = 1;
             }
 
-            // Z animation cycle: 2 second cycle with 4 states (z, zZ, zZz, nothing)
             nappyPenguin.zPhase += 0.0005 * deltaTime;
         }
 
@@ -1406,18 +1570,16 @@
             const penguinWidth = 60;
             const penguinHeight = 45;
 
-            // Draw sleeping penguin with breathing animation
             ctx.save();
             ctx.translate(nappyPenguin.x, nappyPenguin.y + penguinHeight / 2);
             ctx.scale(nappyPenguinScale, nappyPenguinScale);
             ctx.drawImage(sprites.pudgy_nappy, -penguinWidth / 2, -penguinHeight / 2, penguinWidth, penguinHeight);
             ctx.restore();
 
-            // Draw Z's animation - 4 states over 2 seconds: z, zZ, zZz, (nothing)
-            const zCycle = (nappyPenguin.zPhase % 2); // 2 second cycle
-            const stateIndex = Math.floor(zCycle / 0.5); // 0, 1, 2, 3
+            const zCycle = (nappyPenguin.zPhase % 2);
+            const stateIndex = Math.floor(zCycle / 0.5);
 
-            if (stateIndex < 3) { // Only draw for first 3 states (z, zZ, zZz)
+            if (stateIndex < 3) {
                 ctx.save();
                 ctx.fillStyle = '#FFFFFF';
                 ctx.strokeStyle = '#000000';
@@ -1432,18 +1594,16 @@
 
                 const zX = nappyPenguin.x;
                 const zY = nappyPenguin.y - 10;
-                // Gentle bobbing motion - slower and less pronounced than mana orb
                 const zBob = Math.sin(nappyPenguin.zPhase * Math.PI) * 3;
 
-                // Fade in at start of each state, fade out at end
                 const stateProgress = (zCycle % 0.5) / 0.5;
                 let alpha;
                 if (stateProgress < 0.2) {
-                    alpha = stateProgress / 0.2; // Fade in
+                    alpha = stateProgress / 0.2;
                 } else if (stateProgress > 0.8) {
-                    alpha = (1 - stateProgress) / 0.2; // Fade out
+                    alpha = (1 - stateProgress) / 0.2;
                 } else {
-                    alpha = 1; // Full opacity
+                    alpha = 1;
                 }
 
                 ctx.globalAlpha = alpha * 0.9;
@@ -1477,7 +1637,7 @@
                 const progress = elapsed / duration;
 
                 anim.life = 1 - progress;
-                anim.y += 0.5; // Fall down
+                anim.y += 0.5;
             });
 
             penguinCountTextAnimations = penguinCountTextAnimations.filter(anim => anim.life > 0);
@@ -1487,14 +1647,10 @@
             manaTextAnimations.forEach(anim => {
                 ctx.save();
                 ctx.globalAlpha = anim.life;
-                ctx.fillStyle = '#00BFFF';
-                ctx.strokeStyle = '#000000';
-                ctx.lineWidth = 3;
                 ctx.font = '48px Luckiest Guy, Arial';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
-                ctx.strokeText(anim.text, anim.x, anim.y);
-                ctx.fillText(anim.text, anim.x, anim.y);
+                drawStrokedText(anim.text, anim.x, anim.y, '#00BFFF');
                 ctx.restore();
             });
         }
@@ -1503,14 +1659,10 @@
             penguinCountTextAnimations.forEach(anim => {
                 ctx.save();
                 ctx.globalAlpha = anim.life;
-                ctx.fillStyle = '#FFD700';
-                ctx.strokeStyle = '#000000';
-                ctx.lineWidth = 3;
                 ctx.font = '36px Luckiest Guy, Arial';
                 ctx.textAlign = 'left';
                 ctx.textBaseline = 'alphabetic';
-                ctx.strokeText(anim.text, anim.x, anim.y);
-                ctx.fillText(anim.text, anim.x, anim.y);
+                drawStrokedText(anim.text, anim.x, anim.y, '#FFD700');
                 ctx.restore();
             });
         }
@@ -1588,7 +1740,6 @@
             const bottomSafeZone = UI_ZONE_Y - 50;
             const bottomUIZone = { minY: UI_ZONE_Y };
 
-            // Level-based spawn constraints
             const isEasyLevel = currentLevel <= 4;
             const topHalfLimit = canvas.height * 0.5;
 
@@ -1611,7 +1762,6 @@
             }
 
             if (surfacePoints.length >= 2) {
-                // For levels 1-4: igloo in top 50%, ship in bottom 50%
                 if (isEasyLevel) {
                     const topPoints = surfacePoints.filter(p => p.y < topHalfLimit);
                     const bottomPoints = surfacePoints.filter(p => p.y >= topHalfLimit);
@@ -1623,7 +1773,6 @@
                         const exitSurface = bottomPoints[Math.floor(Math.random() * bottomPoints.length)];
                         exit = { x: exitSurface.x, y: exitSurface.y - 60 };
                     } else {
-                        // Fallback if constraints can't be met
                         const entranceSurface = surfacePoints[Math.floor(Math.random() * surfacePoints.length)];
                         entrance = { x: entranceSurface.x, y: entranceSurface.y - 60 };
 
@@ -1645,7 +1794,6 @@
                         }
                     }
                 } else {
-                    // Normal spawning logic for level 5+
                     surfacePoints.sort((a, b) => a.y - b.y);
 
                     const entranceSurface = surfacePoints[Math.floor(Math.random() * surfacePoints.length)];
@@ -1669,7 +1817,6 @@
                     }
                 }
             } else {
-                // Fallback when not enough surface points
                 const entranceY = 200 + Math.random() * 200;
                 const exitY = Math.min(bottomSafeZone - 150, UI_ZONE_Y - 200) + Math.random() * 100;
 
@@ -1955,7 +2102,10 @@
             particles.forEach(p => {
                 p.x += p.vx;
                 p.y += p.vy;
-                p.vy += 0.1;
+                // Only apply gravity if particle doesn't have noGravity flag
+                if (!p.noGravity) {
+                    p.vy += 0.1;
+                }
                 p.life -= p.decay;
             });
             particles = particles.filter(p => p.life > 0);
@@ -1997,25 +2147,20 @@
 
             ctx.save();
 
-            // Main sea layer - with wavy bottom edge
             ctx.fillStyle = 'rgba(30, 100, 180, 0.85)';
             ctx.beginPath();
 
-            // Start from bottom right
             ctx.moveTo(canvas.width, canvas.height);
 
-            // Draw wavy bottom edge (going backwards from right to left)
             for (let x = canvas.width; x >= 0; x -= 2) {
                 const wave1 = Math.sin(x * 0.025 + seaWaveOffset * 1.5) * 3;
                 const wave2 = Math.sin(x * 0.018 - seaWaveOffset * 1.2) * 2;
-                const y = UI_ZONE_Y + 8 + wave1 + wave2; // 8px overlap
+                const y = UI_ZONE_Y + 8 + wave1 + wave2;
                 ctx.lineTo(x, y);
             }
 
-            // Go up the left side
             ctx.lineTo(0, seaY);
 
-            // Draw wavy top edge
             for (let x = 0; x <= canvas.width; x += 2) {
                 const wave1 = Math.sin(x * 0.02 + seaWaveOffset) * 2;
                 const wave2 = Math.sin(x * 0.03 - seaWaveOffset * 1.5) * 1.5;
@@ -2024,30 +2169,24 @@
                 ctx.lineTo(x, y);
             }
 
-            // Close to bottom right
             ctx.lineTo(canvas.width, canvas.height);
             ctx.closePath();
             ctx.fill();
 
-            // Lighter wave layer - also with wavy bottom edge
             ctx.fillStyle = 'rgba(60, 140, 220, 0.4)';
             ctx.beginPath();
 
-            // Start from bottom right
             ctx.moveTo(canvas.width, canvas.height);
 
-            // Draw wavy bottom edge (going backwards from right to left)
             for (let x = canvas.width; x >= 0; x -= 2) {
                 const wave1 = Math.sin(x * 0.025 + seaWaveOffset * 1.5) * 3;
                 const wave2 = Math.sin(x * 0.018 - seaWaveOffset * 1.2) * 2;
-                const y = UI_ZONE_Y + 8 + wave1 + wave2; // Same 8px overlap
+                const y = UI_ZONE_Y + 8 + wave1 + wave2;
                 ctx.lineTo(x, y);
             }
 
-            // Go up the left side
             ctx.lineTo(0, seaY + 4);
 
-            // Draw wavy top edge
             for (let x = 0; x <= canvas.width; x += 2) {
                 const wave1 = Math.sin(x * 0.025 - seaWaveOffset * 2) * 1.5;
                 const wave2 = Math.sin(x * 0.018 + seaWaveOffset * 1.2) * 1;
@@ -2055,7 +2194,6 @@
                 ctx.lineTo(x, y);
             }
 
-            // Close to bottom right
             ctx.lineTo(canvas.width, canvas.height);
             ctx.closePath();
             ctx.fill();
@@ -2161,7 +2299,6 @@
             }
             terrainCtx.stroke();
 
-            // Update collision cache for the drawn line
             const lineLength = Math.sqrt(
                 Math.pow(line[line.length - 1].x - line[0].x, 2) +
                 Math.pow(line[line.length - 1].y - line[0].y, 2)
@@ -2282,7 +2419,6 @@
             terrainCtx.fill();
             terrainCtx.restore();
 
-            // Update collision cache for explosion area
             updateCollisionCacheRegion(x - 50, y - 50, 100, 100);
         }
 
@@ -2292,13 +2428,9 @@
 
             startScreenPenguins.forEach(penguin => penguin.draw());
 
-            ctx.fillStyle = '#FFD700';
-            ctx.strokeStyle = '#000000';
-            ctx.lineWidth = 4;
             ctx.font = '80px Luckiest Guy, Arial';
             ctx.textAlign = 'center';
-            ctx.strokeText('PINGEUS', canvas.width / 2, 150);
-            ctx.fillText('PINGEUS', canvas.width / 2, 150);
+            drawStrokedText('PINGEUS', canvas.width / 2, 150, '#FFD700', '#000000', 4);
 
             startButton.x = canvas.width / 2 - startButton.width / 2;
             startButton.y = canvas.height - 300;
@@ -2347,15 +2479,10 @@
 
             ctx.textAlign = 'center';
 
-            ctx.fillStyle = '#FFD700';
-            ctx.strokeStyle = '#000000';
-            ctx.lineWidth = 3;
             ctx.font = '38px Luckiest Guy, Arial';
             let yPos = popupY + 90;
-            ctx.strokeText('LEAD PENGUS FROM IGLOO TO SHIP', canvas.width / 2, yPos);
-            ctx.fillText('LEAD PENGUS FROM IGLOO TO SHIP', canvas.width / 2, yPos);
+            drawStrokedText('LEAD PENGUS FROM IGLOO TO SHIP', canvas.width / 2, yPos, '#FFD700');
             yPos += 120;
-            ctx.strokeStyle = 'transparent';
             ctx.fillStyle = '#FFFFFF';
             ctx.font = '34px Luckiest Guy, Arial';
             ctx.fillText('Your spells:', canvas.width / 2, yPos);
@@ -2472,6 +2599,11 @@
             fishes = [];
             lastFishSpawn = 0;
             fishEatenThisLevel = 0;
+            blowfish = null;
+            blowfishHasSpawned = false;
+            blowfishSpawnTime = Math.random() * 60000;
+            blowfishScale = 1;
+            blowfishAlpha = 1;
 
             generateTerrain();
             gameStartTime = Date.now();
@@ -2754,12 +2886,10 @@
                 isMusicMuted = data.isMuted;
 
                 if (data.isMuted) {
-                    // Pause the music when muted
                     if (currentAudio && !currentAudio.paused) {
                         currentAudio.pause();
                     }
                 } else {
-                    // Resume the music when unmuted (if window has focus)
                     if (currentAudio && currentAudio.paused && !document.hidden) {
                         currentAudio.volume = 0.7;
                         currentAudio.play().catch(err => console.log('Music play error:', err));
@@ -2786,27 +2916,18 @@
 
             drawIntermissionParticles();
 
-            ctx.fillStyle = '#FFD700';
-            ctx.strokeStyle = '#000000';
-            ctx.lineWidth = 4;
             ctx.font = '60px Luckiest Guy, Arial';
             ctx.textAlign = 'center';
-            ctx.strokeText(`LEVEL ${currentLevel} COMPLETED`, canvas.width / 2, 150);
-            ctx.fillText(`LEVEL ${currentLevel} COMPLETED`, canvas.width / 2, 150);
+            drawStrokedText(`LEVEL ${currentLevel} COMPLETED`, canvas.width / 2, 150, '#FFD700', '#000000', 4);
 
             const pulseScale = 1 + Math.sin(Date.now() / 300) * 0.05;
             ctx.save();
             ctx.translate(canvas.width / 2, canvas.height / 2 - 100);
             ctx.scale(pulseScale, pulseScale);
-            ctx.fillStyle = '#00BFFF';
             ctx.font = '48px Luckiest Guy, Arial';
-            ctx.strokeText(`+${levelCompleteBonus} mana`, 0, 0);
-            ctx.fillText(`+${levelCompleteBonus} mana`, 0, 0);
+            drawStrokedText(`+${levelCompleteBonus} mana`, 0, 0, '#00BFFF');
             ctx.restore();
 
-            ctx.fillStyle = '#FFFFFF';
-            ctx.strokeStyle = '#000000';
-            ctx.lineWidth = 3;
             ctx.font = '24px Luckiest Guy, Arial';
             const lineHeight = 36;
             let y = canvas.height / 2 + 50;
@@ -2815,8 +2936,7 @@
 
             sentences.forEach((sentence, index) => {
                 const displayText = (index < sentences.length - 1 && !sentence.endsWith('.')) ? sentence + '.' : sentence;
-                ctx.strokeText(displayText, canvas.width / 2, y);
-                ctx.fillText(displayText, canvas.width / 2, y);
+                drawStrokedText(displayText, canvas.width / 2, y, '#FFFFFF');
                 y += lineHeight;
             });
 
@@ -2838,22 +2958,15 @@
             ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            ctx.fillStyle = '#FF4444';
-            ctx.strokeStyle = '#000000';
-            ctx.lineWidth = 4;
             ctx.font = '60px Luckiest Guy, Arial';
             ctx.textAlign = 'center';
-            ctx.strokeText('TIME UP!', canvas.width / 2, canvas.height / 2 - 100);
-            ctx.fillText('TIME UP!', canvas.width / 2, canvas.height / 2 - 100);
+            drawStrokedText('TIME UP!', canvas.width / 2, canvas.height / 2 - 100, '#FF4444', '#000000', 4);
 
-            ctx.fillStyle = '#FFFFFF';
             ctx.font = '36px Luckiest Guy, Arial';
-            ctx.strokeText(`Final Score: ${score}`, canvas.width / 2, canvas.height / 2 - 20);
-            ctx.fillText(`Final Score: ${score}`, canvas.width / 2, canvas.height / 2 - 20);
+            drawStrokedText(`Final Score: ${score}`, canvas.width / 2, canvas.height / 2 - 20, '#FFFFFF');
 
             ctx.font = '28px Luckiest Guy, Arial';
-            ctx.strokeText(`Reached Level ${currentLevel}`, canvas.width / 2, canvas.height / 2 + 40);
-            ctx.fillText(`Reached Level ${currentLevel}`, canvas.width / 2, canvas.height / 2 + 40);
+            drawStrokedText(`Reached Level ${currentLevel}`, canvas.width / 2, canvas.height / 2 + 40, '#FFFFFF');
 
             if (!window.FarcadeSDK) {
                 gameOverButton.x = canvas.width / 2 - gameOverButton.width / 2;
@@ -2903,18 +3016,11 @@
             ctx.save();
             ctx.translate(canvas.width / 2, 60);
             ctx.scale(scoreAnimation.scale, scoreAnimation.scale);
-            ctx.fillStyle = '#FFD700';
-            ctx.strokeStyle = '#000000';
-            ctx.lineWidth = 3;
             ctx.font = '64px Luckiest Guy, Arial';
             ctx.textAlign = 'center';
-            ctx.strokeText(`${score}`, 0, 0);
-            ctx.fillText(`${score}`, 0, 0);
+            drawStrokedText(`${score}`, 0, 0, '#FFD700');
             ctx.restore();
 
-            ctx.fillStyle = '#FFFFFF';
-            ctx.strokeStyle = '#000000';
-            ctx.lineWidth = 3;
             ctx.font = '48px Luckiest Guy, Arial';
             ctx.textAlign = 'right';
 
@@ -2923,25 +3029,19 @@
             const seconds = Math.floor((remainingTime % 60000) / 1000);
             const timeText = `${minutes}:${seconds.toString().padStart(2, '0')}`;
 
-            ctx.strokeText(timeText, canvas.width - 30, 50);
-            ctx.fillText(timeText, canvas.width - 30, 50);
+            drawStrokedText(timeText, canvas.width - 30, 50, '#FFFFFF');
 
             ctx.textAlign = 'left';
             ctx.font = '40px Luckiest Guy, Arial';
             const penguinText = `${lemmingsSaved}/${lemmingsSpawned}`;
-            ctx.strokeText(penguinText, 30, 50);
-            ctx.fillText(penguinText, 30, 50);
+            drawStrokedText(penguinText, 30, 50, '#FFFFFF');
 
             ctx.save();
             ctx.translate(100 + manaAnimation.shake, canvas.height - 60);
-            ctx.fillStyle = '#00BFFF';
-            ctx.strokeStyle = '#000000';
-            ctx.lineWidth = 3;
             ctx.font = '64px Luckiest Guy, Arial';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.strokeText(`${mana}`, 0, 0);
-            ctx.fillText(`${mana}`, 0, 0);
+            drawStrokedText(`${mana}`, 0, 0, '#00BFFF');
             ctx.restore();
 
             ctx.restore();
@@ -2963,8 +3063,11 @@
             drawStaticTerrain();
             drawSea();
 
-            // Draw fishes (behind penguins)
             fishes.forEach(fish => fish.draw());
+
+            if (blowfish && blowfish.active) {
+                blowfish.draw();
+            }
 
             drawManaOrb();
             drawNappyPenguin();
@@ -2989,14 +3092,12 @@
 
             lemmings.forEach(lemming => lemming.draw());
 
-            // Draw UI zone background AFTER penguins - creates "underwater" effect with wavy top
             ctx.save();
             ctx.fillStyle = 'rgba(30, 100, 180, 0.85)';
             ctx.beginPath();
             ctx.moveTo(0, canvas.height);
             ctx.lineTo(0, UI_ZONE_Y);
 
-            // Draw wavy top edge using sine waves
             for (let x = 0; x <= canvas.width; x += 2) {
                 const wave1 = Math.sin(x * 0.025 + seaWaveOffset * 1.5) * 3;
                 const wave2 = Math.sin(x * 0.018 - seaWaveOffset * 1.2) * 2;
@@ -3057,6 +3158,11 @@
             fishes = [];
             lastFishSpawn = 0;
             fishEatenThisLevel = 0;
+            blowfish = null;
+            blowfishHasSpawned = false;
+            blowfishSpawnTime = Math.random() * 60000;
+            blowfishScale = 1;
+            blowfishAlpha = 1;
 
             generateTerrain();
 
@@ -3151,12 +3257,38 @@
                 lastSpawnTime = currentTime;
             }
 
-            // Spawn fish periodically (affected by game speed, max 4 per level)
             if (fishEatenThisLevel < MAX_FISH_PER_LEVEL) {
                 const adjustedFishSpawnInterval = FISH_SPAWN_INTERVAL / gameSpeed;
                 if (currentTime - lastFishSpawn > adjustedFishSpawnInterval) {
                     fishes.push(new Fish());
                     lastFishSpawn = currentTime;
+                }
+            }
+
+            if (currentLevel >= 5 && !blowfishHasSpawned && accumulatedTime >= blowfishSpawnTime) {
+                blowfish = new Blowfish();
+                blowfishHasSpawned = true;
+            }
+
+            // Generate energy particles radiating from blowfish
+            if (blowfish && blowfish.active && !blowfish.collected) {
+                if (currentTime - blowfish.lastParticleTime > 250 / gameSpeed) {
+                    blowfish.lastParticleTime = currentTime;
+                    const angle = Math.random() * Math.PI * 2;
+                    const speed = 0.075 + Math.random() * 0.125;
+                    const colors = ['#FFD700', '#FFA500', '#FFFF00'];
+                    const color = colors[Math.floor(Math.random() * colors.length)];
+
+                    particles.push({
+                        x: blowfish.x,
+                        y: blowfish.y,
+                        vx: Math.cos(angle) * speed,
+                        vy: Math.sin(angle) * speed,
+                        life: 0.5,
+                        decay: 0.002,
+                        color: color,
+                        noGravity: true
+                    });
                 }
             }
 
@@ -3171,9 +3303,12 @@
                 updatePenguinCountTextAnimations();
             }
 
-            // Update fishes (affected by game speed)
             fishes.forEach(fish => fish.update(cappedDeltaTime, gameSpeed));
             fishes = fishes.filter(fish => fish.active);
+
+            if (blowfish && blowfish.active) {
+                blowfish.update(cappedDeltaTime, gameSpeed);
+            }
 
             lemmings = lemmings.filter(lemming => lemming.alive);
 
