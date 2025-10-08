@@ -155,7 +155,7 @@
         const terrainCtx = terrainCanvas.getContext('2d');
 
         // Testing constant - set to 1 for production
-        const STARTING_LEVEL = 17;
+        const STARTING_LEVEL = 16;
 
         // UI Zone - bottom 10% reserved for buttons
         const UI_ZONE_PERCENT = 0.1;
@@ -243,8 +243,6 @@
         let blowfish = null;
         let blowfishSpawnTime = 0;
         let blowfishHasSpawned = false;
-        let blowfishScale = 1;
-        let blowfishAlpha = 1;
 
         let scoreAnimation = { active: false, scale: 1, startTime: 0 };
         let manaAnimation = { active: false, shake: 0, startTime: 0 };
@@ -564,8 +562,8 @@
                 currentSkyColor = '#c8fc8c';
             } else {
                 groundPattern = terrainCtx.createPattern(sprites.ground_5, 'repeat');
-                currentOutlineColor = '#202020';
-                currentSkyColor = '#EE4B2B';
+                currentOutlineColor = '#5A5A5A';
+                currentSkyColor = '#FF3333';
             }
         }
 
@@ -1081,8 +1079,9 @@
                 const drawWidth = this.width;
                 const drawHeight = this.height;
 
+                // Always treat this.x, this.y as the center
                 if (!this.movingRight) {
-                    ctx.translate(this.x + drawWidth / 2, this.y);
+                    ctx.translate(this.x, this.y);
                     ctx.scale(-1, 1);
                     ctx.drawImage(this.sprite, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
                 } else {
@@ -1162,13 +1161,12 @@
 
                 ctx.save();
 
-                ctx.globalAlpha = blowfishAlpha;
+                const drawWidth = this.width;
+                const drawHeight = this.height;
 
-                const drawWidth = this.width * blowfishScale;
-                const drawHeight = this.height * blowfishScale;
-
+                // Always treat this.x, this.y as the center
                 if (!this.movingRight) {
-                    ctx.translate(this.x + drawWidth / 2, this.y);
+                    ctx.translate(this.x, this.y);
                     ctx.scale(-1, 1);
                     ctx.drawImage(this.sprite, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
                 } else {
@@ -1514,25 +1512,7 @@
                 startTime: Date.now()
             });
 
-            const startTime = Date.now();
-            const duration = 600;
-
-            function animate() {
-                const elapsed = Date.now() - startTime;
-                const progress = Math.min(elapsed / duration, 1);
-
-                blowfishScale = 1 + progress * 0.5;
-                blowfishAlpha = 1 - progress;
-
-                if (progress < 1) {
-                    requestAnimationFrame(animate);
-                } else {
-                    blowfish.active = false;
-                    blowfishScale = 1;
-                    blowfishAlpha = 1;
-                }
-            }
-            animate();
+            blowfish.active = false;
 
             manaAnimation.active = true;
             manaAnimation.startTime = Date.now();
@@ -2610,8 +2590,6 @@
             blowfish = null;
             blowfishHasSpawned = false;
             blowfishSpawnTime = Math.random() * 60000;
-            blowfishScale = 1;
-            blowfishAlpha = 1;
 
             generateTerrain();
             gameStartTime = Date.now();
@@ -3169,8 +3147,6 @@
             blowfish = null;
             blowfishHasSpawned = false;
             blowfishSpawnTime = Math.random() * 60000;
-            blowfishScale = 1;
-            blowfishAlpha = 1;
 
             generateTerrain();
 
