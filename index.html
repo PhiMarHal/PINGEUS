@@ -791,16 +791,15 @@
                 // Update spin using time-based speed (degrees/sec) so visuals don't speed up with gameSpeed
                 this.spinAngle += this.spinSpeed * dt;
 
-                // Grace: ignore collisions only while still close to the launch point (time AND distance)
-                const timeSinceLaunch = performance.now() - this.launchTime;
-                const graceTime = 120; // ms (short)
-                const maxGraceDistance = 40; // px
-                const launchCenterX = (this.launchX !== undefined) ? (this.launchX + this.width / 2) : (this.x + this.width / 2);
-                const launchCenterY = (this.launchY !== undefined) ? (this.launchY + this.height / 2) : (this.y + this.height / 2);
+                // Grace: ignore collisions only while still close to the launch point
+                const launchCenterX = (this.launchX ?? this.x) + this.width / 2;
+                const launchCenterY = (this.launchY ?? this.y) + this.height / 2;
                 const currCenterX = oldX + this.width / 2;
                 const currCenterY = oldY + this.height / 2;
                 const distFromLaunch = Math.hypot(currCenterX - launchCenterX, currCenterY - launchCenterY);
-                const inGrace = (timeSinceLaunch < graceTime && distFromLaunch < maxGraceDistance);
+                const maxGraceDistance = 40;
+                const inGrace = distFromLaunch < maxGraceDistance;
+
 
                 // Sweep along the motion to avoid tunneling (sample a few substeps)
                 const dx = newX - oldX, dy = newY - oldY;
@@ -818,7 +817,7 @@
 
                     if (inGrace) {
                         const d = Math.hypot(centerX - launchCenterX, centerY - launchCenterY);
-                        if (d < maxGraceDistance && timeSinceLaunch < graceTime) {
+                        if (d < maxGraceDistance) {
                             // still hugging the trap, skip collision checks here
                             continue;
                         }
@@ -900,6 +899,40 @@
                         this.createLandingParticles();
                         return;
                     }
+                }
+
+                // Clamp to canvas bounds and bounce lightly
+                if (this.x < 0) { this.x = 0; this.flyVx = Math.abs(this.flyVx) * 0.5; }
+                if (this.x + this.width > canvas.width) {
+                    this.x = canvas.width - this.width;
+                    this.flyVx = -Math.abs(this.flyVx) * 0.5;
+                }
+                if (this.y < 0) { this.y = 0; this.flyVy = Math.abs(this.flyVy) * 0.5; }
+                if (this.y + this.height > canvas.height) {
+                    this.y = canvas.height - this.height;
+                    this.flyVy = -Math.abs(this.flyVy) * 0.5;
+                }
+
+                // If penguin somehow ends up inside terrain, push it downward until free
+                const centerX = this.x + this.width / 2;
+                const centerY = this.y + this.height / 2;
+
+                if (isSolidPixelCached(centerX, centerY) && isSolidPixelCached(centerX, centerY + this.height / 2)) {
+                    let safetyCounter = 0;
+                    while (
+                        isSolidPixelCached(centerX, this.y + this.height - 1) &&
+                        this.y + this.height < canvas.height &&
+                        safetyCounter < 60
+                    ) {
+                        this.y += 1;
+                        safetyCounter++;
+                    }
+                    // Return to grounded/falling state
+                    this.isFlying = false;
+                    this.isAffectedByForce = false;
+                    this.flyVx = 0;
+                    this.flyVy = 0;
+                    this.vy = 0;
                 }
 
                 // Check bounds
@@ -1011,6 +1044,41 @@
                     this.lastAction = "falling";
                     this.justSteppedUp = false;
                 } else {
+                    // --- NEW: detect if penguin is actually embedded in solid terrain (not just on a slope) ---
+                    const bodyCenterX = this.x + this.width / 2;
+                    const headY = this.y + 2;                   // a little below the top
+                    const feetY = this.y + this.height - 2;     // a little above the bottom
+
+                    const headSolid = isSolidPixelCached(bodyCenterX, headY);
+                    const feetSolid = isSolidPixelCached(bodyCenterX, feetY);
+
+                    // Only consider it "embedded" if both head and feet are solid,
+                    // AND at least a few pixels above the head are also solid.
+                    let buried = false;
+                    if (headSolid && feetSolid) {
+                        let solidAbove = 0;
+                        for (let y = headY - 1; y >= headY - 6 && y >= 0; y--) {
+                            if (isSolidPixelCached(bodyCenterX, y)) solidAbove++;
+                        }
+                        buried = solidAbove >= 3; // truly enclosed
+                    }
+
+                    if (buried) {
+                        let safety = 0;
+                        while (
+                            isSolidPixelCached(bodyCenterX, this.y + this.height - 1) &&
+                            this.y + this.height < canvas.height &&
+                            safety < 60
+                        ) {
+                            this.y += 1;
+                            safety++;
+                        }
+                        this.vy = 0;
+                        return; // skip upward snap this frame
+                    }
+                    // --- END NEW BLOCK ---
+
+
                     this.vy = 0;
 
                     if (!this.justSteppedUp) {
@@ -1026,6 +1094,7 @@
 
                     this.attemptMovement(dt);
                 }
+
 
                 if (this.x <= 0 || this.x >= canvas.width - this.width) {
                     this.vx = -this.vx;
