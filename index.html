@@ -757,6 +757,64 @@
                 this.launchTime = 0; // Track when penguin was launched
             }
 
+            // --- Unified collision handler: handleMovement(dx, dy) ---
+            // Call this instead of directly setting this.x / this.y when applying motion.
+            // Uses isSolidPixelCached for fast pixel-level collision checks (no getImageData).
+            handleMovement(dx, dy) {
+                const oldX = this.x;
+                const oldY = this.y;
+                let newX = oldX + dx;
+                let newY = oldY + dy;
+
+                // Canvas boundaries -> behave like walls (reverse horizontal dir) or stop vertical motion
+                if (newX < 0) { newX = 0; this.direction = 1; this.vx = 0; this.flyVx = 0; }
+                if (newX + this.width > canvas.width) { newX = canvas.width - this.width; this.direction = -1; this.vx = 0; this.flyVx = 0; }
+                if (newY < 0) { newY = 0; this.vy = 0; this.flyVy = 0; }
+                if (newY + this.height > canvas.height) { newY = canvas.height - this.height; this.vy = 0; this.flyVy = 0; this.isFlying = false; }
+
+                // Sample points (cheap) — tune offsets if your sprite size differs
+                const cx = Math.floor(newX + this.width / 2);
+                const topY = Math.floor(newY + 2);
+                const midY = Math.floor(newY + this.height / 2);
+                const bottomY = Math.floor(newY + this.height - 2);
+                const leftX = Math.floor(newX + 2);
+                const rightX = Math.floor(newX + this.width - 2);
+
+                // Cheap cached checks
+                const solidLeftTop = isSolidPixelCached(leftX, topY);
+                const solidLeftMid = isSolidPixelCached(leftX, midY);
+                const solidRightTop = isSolidPixelCached(rightX, topY);
+                const solidRightMid = isSolidPixelCached(rightX, midY);
+                const solidTop = isSolidPixelCached(cx, topY);
+                const solidBottom = isSolidPixelCached(cx, bottomY);
+
+                // Horizontal collision -> treat as wall, cancel horizontal move and reverse direction
+                if (dx > 0 && (solidRightTop || solidRightMid)) {
+                    newX = oldX;
+                    this.direction = -1;
+                    this.vx = 0; this.flyVx = 0;
+                } else if (dx < 0 && (solidLeftTop || solidLeftMid)) {
+                    newX = oldX;
+                    this.direction = 1;
+                    this.vx = 0; this.flyVx = 0;
+                }
+
+                // Vertical collision -> ceiling stops upward motion; floor lands the penguin
+                if (dy < 0 && solidTop) {
+                    newY = oldY;
+                    this.vy = 0; this.flyVy = 0;
+                } else if (dy > 0 && solidBottom) {
+                    // Land on floor: reset vertical and flying flags
+                    newY = oldY;
+                    this.vy = 0; this.flyVy = 0; this.isFlying = false;
+                }
+
+                // Apply resolved position
+                this.x = newX;
+                this.y = newY;
+            }
+
+
             launchFromSpring(angle, speed) {
                 this.isAffectedByForce = true;
                 this.isFlying = true;
@@ -993,7 +1051,7 @@
                     const bobOffset = Math.sin(this.bobPhase) * 5;
                     this.y = UI_ZONE_Y - this.height + 10 + bobOffset;
 
-                    this.x += this.vx * dt;
+                    this.handleMovement(this.vx * dt, this.vy * dt);
 
                     if (isSolidPixelCached(groundCheckX, feetY - 20)) {
                         this.swimming = false;
@@ -1186,7 +1244,7 @@
                     }
                 }
 
-                this.x = newX;
+                this.handleMovement(direction * speed * dt, 0);
                 this.lastAction = "walking";
             }
 
@@ -1373,7 +1431,7 @@
                 this.lastUpdateTime = now;
 
                 const dt = deltaTime / 1000;
-                this.x += this.vx * dt;
+                this.handleMovement(this.vx * dt, this.vy * dt);
             }
 
             isOffScreen() {
