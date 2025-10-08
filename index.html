@@ -155,7 +155,7 @@
         const terrainCtx = terrainCanvas.getContext('2d');
 
         // Testing constant - set to 1 for production
-        const STARTING_LEVEL = 16;
+        const STARTING_LEVEL = 5;
 
         // UI Zone - bottom 10% reserved for buttons
         const UI_ZONE_PERCENT = 0.1;
@@ -195,6 +195,9 @@
         let nappyPenguin = null;
         let nappyPenguinScale = 1;
         let penguinCountTextAnimations = [];
+
+        // Spring traps state
+        let springTraps = [];
 
         const gameHints = [
             "Ending a level gives you mana. Earlier levels give more mana.",
@@ -497,7 +500,9 @@
             pudgy_nappy: new Image(),
             fish_orange: new Image(),
             fish_green: new Image(),
-            fish_blowfish: new Image()
+            fish_blowfish: new Image(),
+            spring_trap_idle: new Image(),
+            spring_trap_active: new Image()
         };
 
         sprites.igloo.src = BASE_URL + 'igloo.png';
@@ -520,9 +525,11 @@
         sprites.fish_orange.src = BASE_URL + 'fish_orange.png';
         sprites.fish_green.src = BASE_URL + 'fish_green.png';
         sprites.fish_blowfish.src = BASE_URL + 'fish_blowfish.png';
+        sprites.spring_trap_idle.src = BASE_URL + 'spring_trap_idle.png';
+        sprites.spring_trap_active.src = BASE_URL + 'spring_trap_active.png';
 
         let spritesLoaded = 0;
-        const totalSprites = 20;
+        const totalSprites = 22;
 
         function onSpriteLoad() {
             spritesLoaded++;
@@ -587,6 +594,8 @@
         sprites.fish_orange.onload = onSpriteLoad;
         sprites.fish_green.onload = onSpriteLoad;
         sprites.fish_blowfish.onload = onSpriteLoad;
+        sprites.spring_trap_idle.onload = onSpriteLoad;
+        sprites.spring_trap_active.onload = onSpriteLoad;
 
         sprites.igloo.onerror = () => console.error('Failed to load igloo.png');
         sprites.ship.onerror = () => console.error('Failed to load ship.png');
@@ -608,6 +617,8 @@
         sprites.fish_orange.onerror = () => console.error('Failed to load fish_orange.png');
         sprites.fish_green.onerror = () => console.error('Failed to load fish_green.png');
         sprites.fish_blowfish.onerror = () => console.error('Failed to load fish_blowfish.png');
+        sprites.spring_trap_idle.onerror = () => console.error('Failed to load spring_trap_idle.png');
+        sprites.spring_trap_active.onerror = () => console.error('Failed to load spring_trap_active.png');
 
         function startShipSeaRocking() {
             const maxRotation = 4 * Math.PI / 180;
@@ -735,10 +746,201 @@
                 this.animationFrame = 0;
                 this.lastAnimationTime = performance.now();
                 this.animationInterval = 125;
+
+                // Flying/force state
+                this.isAffectedByForce = false;
+                this.isFlying = false;
+                this.flyVx = 0;
+                this.flyVy = 0;
+                this.spinAngle = 0;
+                this.spinSpeed = 0;
+                this.launchTime = 0; // Track when penguin was launched
             }
 
-            update(deltaTime = 16.67) {
+            launchFromSpring(angle, speed) {
+                this.isAffectedByForce = true;
+                this.isFlying = true;
+                this.flyVx = Math.cos(angle) * speed;
+                this.flyVy = -Math.sin(angle) * speed; // Negative because Y increases downward in canvas
+
+                // spinSpeed is now degrees per SECOND (not degrees per update)
+                this.spinSpeed = 720; // adjust if you want faster/slower visual spin
+                this.spinAngle = 0;
+
+                this.vy = 0; // Reset normal velocity
+
+                this.launchTime = performance.now(); // Record launch time
+                this.launchX = this.x; // store launch origin for distance-based grace
+                this.launchY = this.y;
+            }
+
+
+            updateFlying(deltaTime, currentGameSpeed) {
+                // per-update dt so dt * updatesPerFrame == deltaTime/1000 total for the frame
+                const dt = (deltaTime / 1000) / currentGameSpeed;
+
+                // Apply gravity to flying velocity
+                this.flyVy += 500 * dt;
+
+                // Proposed new position
+                const oldX = this.x;
+                const oldY = this.y;
+                const newX = oldX + this.flyVx * dt;
+                const newY = oldY + this.flyVy * dt;
+
+                // Update spin using time-based speed (degrees/sec) so visuals don't speed up with gameSpeed
+                this.spinAngle += this.spinSpeed * dt;
+
+                // Grace: ignore collisions only while still close to the launch point (time AND distance)
+                const timeSinceLaunch = performance.now() - this.launchTime;
+                const graceTime = 120; // ms (short)
+                const maxGraceDistance = 40; // px
+                const launchCenterX = (this.launchX !== undefined) ? (this.launchX + this.width / 2) : (this.x + this.width / 2);
+                const launchCenterY = (this.launchY !== undefined) ? (this.launchY + this.height / 2) : (this.y + this.height / 2);
+                const currCenterX = oldX + this.width / 2;
+                const currCenterY = oldY + this.height / 2;
+                const distFromLaunch = Math.hypot(currCenterX - launchCenterX, currCenterY - launchCenterY);
+                const inGrace = (timeSinceLaunch < graceTime && distFromLaunch < maxGraceDistance);
+
+                // Sweep along the motion to avoid tunneling (sample a few substeps)
+                const dx = newX - oldX, dy = newY - oldY;
+                const maxMove = Math.max(Math.abs(dx), Math.abs(dy));
+                const steps = Math.max(1, Math.ceil(maxMove / 4)); // sample every ~4px
+                let collided = false;
+                let collisionPoint = null;
+
+                for (let s = 1; s <= steps; s++) {
+                    const t = s / steps;
+                    const sampleX = oldX + dx * t;
+                    const sampleY = oldY + dy * t;
+                    const centerX = sampleX + this.width / 2;
+                    const centerY = sampleY + this.height / 2;
+
+                    if (inGrace) {
+                        const d = Math.hypot(centerX - launchCenterX, centerY - launchCenterY);
+                        if (d < maxGraceDistance && timeSinceLaunch < graceTime) {
+                            // still hugging the trap, skip collision checks here
+                            continue;
+                        }
+                    }
+
+                    // check a handful of meaningful test points (center + corners + feet)
+                    const checks = [
+                        { x: centerX, y: centerY },
+                        { x: sampleX + 2, y: sampleY + 2 }, // top-left-ish
+                        { x: sampleX + this.width - 2, y: sampleY + 2 }, // top-right-ish
+                        { x: sampleX + 2, y: sampleY + this.height - 2 }, // bottom-left
+                        { x: sampleX + this.width - 2, y: sampleY + this.height - 2 }, // bottom-right
+                        { x: centerX, y: sampleY + this.height - 1 } // feet
+                    ];
+
+                    for (const p of checks) {
+                        if (isSolidPixelCached(p.x, p.y)) {
+                            collided = true;
+                            collisionPoint = { sampleX, sampleY, centerX, centerY, p };
+                            break;
+                        }
+                    }
+
+                    if (collided) break;
+                }
+
+                if (!collided) {
+                    // commit movement if safe
+                    this.x = newX;
+                    this.y = newY;
+                } else {
+                    // resolve collision
+                    const { sampleX, sampleY, centerX, centerY, p } = collisionPoint;
+
+                    // If the collision point is above the penguin's center -> ceiling hit
+                    if (p.y < centerY) {
+                        // push the penguin down a bit until it's not colliding (bounded)
+                        let attempts = 0;
+                        while (attempts < 80 && (isSolidPixelCached(centerX, this.y + 1) || isSolidPixelCached(centerX, this.y + this.height / 2))) {
+                            this.y += 1;
+                            attempts++;
+                        }
+
+                        // Return to normal behavior (let gravity take over so penguin falls)
+                        this.isFlying = false;
+                        this.isAffectedByForce = false;
+                        this.flyVx = 0;
+                        this.flyVy = 0;
+                        this.vy = 0;
+                        this.spinAngle = 0;
+                        return;
+                    } else {
+                        // floor/side collision: try to find top of ground near the collision and place penguin on it
+                        const feetX = centerX;
+                        let feetY = sampleY + this.height;
+                        let foundY = -1;
+                        // search up to 50px up for a solid pixel to land on
+                        for (let y = Math.floor(feetY); y >= Math.max(0, Math.floor(feetY) - 50); y--) {
+                            if (isSolidPixelCached(feetX, y)) {
+                                foundY = y;
+                                break;
+                            }
+                        }
+
+                        if (foundY !== -1) {
+                            this.y = foundY - this.height;
+                        } else {
+                            // fallback: step back to safe position (previous)
+                            this.x = oldX;
+                            this.y = oldY;
+                        }
+
+                        // Land
+                        this.isFlying = false;
+                        this.isAffectedByForce = false;
+                        this.flyVx = 0;
+                        this.flyVy = 0;
+                        this.spinAngle = 0;
+                        this.createLandingParticles();
+                        return;
+                    }
+                }
+
+                // Check bounds
+                if (this.x < 0 || this.x > canvas.width - this.width ||
+                    this.y > canvas.height) {
+                    this.alive = false;
+                }
+            }
+
+
+            createLandingParticles() {
+                const colors = ['#FFFFFF', '#DDDDDD', '#CCCCCC'];
+                const numParticles = 8;
+
+                for (let i = 0; i < numParticles; i++) {
+                    const angle = Math.random() * Math.PI; // 0 to PI (full upper hemisphere)
+                    const speed = 1 + Math.random() * 2;
+                    const color = colors[Math.floor(Math.random() * colors.length)];
+
+                    particles.push({
+                        x: this.x + this.width / 2,
+                        y: this.y + this.height,
+                        vx: Math.cos(angle) * speed,
+                        vy: -Math.sin(angle) * speed, // Negative to go upward
+                        life: 0.8,
+                        decay: 0.015,
+                        color: color
+                    });
+                }
+            }
+
+            update(deltaTime = 16.67, currentGameSpeed = 1) {
                 if (!this.alive) return;
+
+                // If affected by external force, use special update
+                if (this.isAffectedByForce) {
+                    if (this.isFlying) {
+                        this.updateFlying(deltaTime, currentGameSpeed);
+                    }
+                    return;
+                }
 
                 const dt = deltaTime / 1000;
 
@@ -869,6 +1071,13 @@
                     collectBlowfish();
                 }
 
+                // Check spring trap collision
+                springTraps.forEach(trap => {
+                    if (trap.checkCollisionWithLemming(this)) {
+                        trap.activate(this);
+                    }
+                });
+
                 if (exit && this.distance(this.x + this.width / 2, this.y + this.height / 2, exit.x, exit.y) < 60) {
                     this.alive = false;
                     lemmingsSaved++;
@@ -926,6 +1135,18 @@
                 const offsetX = (spriteWidth - this.width) / 2;
                 const offsetY = (spriteHeight - this.height) / 2;
 
+                // If flying, draw spinning jump sprite
+                if (this.isFlying) {
+                    const drawX = this.x + this.width / 2;
+                    const drawY = this.y + this.height / 2;
+
+                    ctx.translate(drawX, drawY);
+                    ctx.rotate(this.spinAngle * Math.PI / 180);
+                    ctx.drawImage(sprites.pudgy_jump, -spriteWidth / 2, -spriteHeight / 2, spriteWidth, spriteHeight);
+                    ctx.restore();
+                    return;
+                }
+
                 const now = performance.now();
                 if (now - this.lastAnimationTime >= this.animationInterval) {
                     this.animationFrame++;
@@ -951,6 +1172,113 @@
                     ctx.drawImage(currentSprite, 0, 0, spriteWidth, spriteHeight);
                 } else {
                     ctx.drawImage(currentSprite, this.x - offsetX, this.y - offsetY, spriteWidth, spriteHeight);
+                }
+
+                ctx.restore();
+            }
+        }
+
+        class SpringTrap {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.size = 72; // Increased to 150% of original (48 * 1.5)
+                this.collisionRadius = 45; // Increased proportionally
+                this.active = false;
+                this.cooldown = 0;
+                this.cooldownDuration = 2000; // 2 seconds before can trigger again
+                this.launchAngle = 0; // Store angle for sprite rotation
+            }
+
+            checkCollisionWithLemming(lemming) {
+                if (!lemming.alive || lemming.isAffectedByForce || this.cooldown > 0) return false;
+
+                const lemmingCenterX = lemming.x + lemming.width / 2;
+                const lemmingCenterY = lemming.y + lemming.height / 2;
+
+                const dx = lemmingCenterX - this.x;
+                const dy = lemmingCenterY - this.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                return distance < this.collisionRadius;
+            }
+
+            activate(lemming) {
+                // Random angle in upper hemisphere (0 to 180 degrees, or 0 to PI radians)
+                const angleInDegrees = Math.random() * 180;
+                const angleInRadians = (angleInDegrees * Math.PI) / 180;
+                const speed = 300 + Math.random() * 200; // Random speed between 300-500
+
+                // Store angle for sprite rotation
+                this.launchAngle = angleInRadians;
+
+                // Move penguin away from trap before launching to avoid immediate collision
+                const launchDistance = 50; // Increased from 35 due to larger trap size
+                const offsetX = Math.cos(angleInRadians) * launchDistance;
+                const offsetY = -Math.sin(angleInRadians) * launchDistance; // Negative for upward
+
+                lemming.x += offsetX;
+                lemming.y += offsetY;
+
+                // Launch the penguin
+                lemming.launchFromSpring(angleInRadians, speed);
+
+                // Set trap to active state
+                this.active = true;
+                this.cooldown = this.cooldownDuration;
+
+                // Create activation particles
+                this.createActivationParticles();
+
+                // Reset to idle after a short time
+                setTimeout(() => {
+                    this.active = false;
+                }, 300);
+            }
+
+            createActivationParticles() {
+                const colors = ['#FF6B6B', '#FFA500', '#FFD700', '#FF4444'];
+                const numParticles = 12;
+
+                for (let i = 0; i < numParticles; i++) {
+                    const angle = Math.random() * Math.PI; // Upper hemisphere
+                    const speed = 2 + Math.random() * 3;
+                    const color = colors[Math.floor(Math.random() * colors.length)];
+
+                    particles.push({
+                        x: this.x,
+                        y: this.y,
+                        vx: Math.cos(angle) * speed,
+                        vy: -Math.sin(angle) * speed - 2, // Negative to go upward
+                        life: 1.0,
+                        decay: 0.012,
+                        color: color
+                    });
+                }
+            }
+
+            update(deltaTime) {
+                if (this.cooldown > 0) {
+                    this.cooldown -= deltaTime;
+                    if (this.cooldown < 0) this.cooldown = 0;
+                }
+            }
+
+            draw() {
+                const sprite = this.active ? sprites.spring_trap_active : sprites.spring_trap_idle;
+
+                ctx.save();
+
+                if (this.active) {
+                    // Draw active trap 50% bigger and rotated to show launch direction
+                    const activeSize = this.size * 1.5;
+                    ctx.translate(this.x, this.y);
+                    // Flip the rotation so sprite points in the direction of launch
+                    ctx.rotate(Math.PI / 2 - this.launchAngle);
+                    ctx.drawImage(sprite, -activeSize / 2, -activeSize / 2, activeSize, activeSize);
+                } else {
+                    // Draw idle trap normally (no rotation)
+                    ctx.drawImage(sprite, this.x - this.size / 2, this.y - this.size / 2, this.size, this.size);
                 }
 
                 ctx.restore();
@@ -1276,7 +1604,51 @@
             findSpawnPoints();
             spawnManaOrb();
             spawnNappyPenguin();
+            spawnSpringTraps();
             drawStaticTerrain();
+        }
+
+        function spawnSpringTraps() {
+            springTraps = [];
+
+            // Only spawn spring traps from level 5 onwards
+            if (currentLevel < 5) return;
+
+            const numTraps = Math.min(1 + Math.floor((currentLevel - 5) / 3), 4); // 1-4 traps depending on level
+            const bottomSafeZone = UI_ZONE_Y - 50;
+            const scanStep = 30;
+            const surfacePoints = [];
+
+            // Find all valid surface points
+            for (let x = 100; x < canvas.width - 100; x += scanStep) {
+                for (let y = 150; y < bottomSafeZone; y += scanStep) {
+                    if (isTerrainAt(x, y)) {
+                        const hasSpaceAbove = !isTerrainAt(x, y - 40) && !isTerrainAt(x, y - 25);
+
+                        if (hasSpaceAbove) {
+                            const leftOk = isTerrainAt(x - scanStep, y) || isTerrainAt(x - scanStep, y + 12);
+                            const rightOk = isTerrainAt(x + scanStep, y) || isTerrainAt(x + scanStep, y + 12);
+
+                            if (leftOk && rightOk) {
+                                // Check distance from entrance and exit
+                                const tooCloseToEntrance = entrance && distance(x, y, entrance.x, entrance.y) < 180;
+                                const tooCloseToExit = exit && distance(x, y, exit.x, exit.y) < 180;
+
+                                if (!tooCloseToEntrance && !tooCloseToExit) {
+                                    surfacePoints.push({ x, y });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Spawn traps on random valid positions
+            for (let i = 0; i < numTraps && surfacePoints.length > 0; i++) {
+                const randomIndex = Math.floor(Math.random() * surfacePoints.length);
+                const spawnPoint = surfacePoints.splice(randomIndex, 1)[0];
+                springTraps.push(new SpringTrap(spawnPoint.x, spawnPoint.y - 24));
+            }
         }
 
         function spawnManaOrb() {
@@ -2590,6 +2962,7 @@
             blowfish = null;
             blowfishHasSpawned = false;
             blowfishSpawnTime = Math.random() * 60000;
+            springTraps = [];
 
             generateTerrain();
             gameStartTime = Date.now();
@@ -3047,6 +3420,10 @@
             }
 
             drawStaticTerrain();
+
+            // Draw spring traps
+            springTraps.forEach(trap => trap.draw());
+
             drawSea();
 
             fishes.forEach(fish => fish.draw());
@@ -3147,6 +3524,8 @@
             blowfish = null;
             blowfishHasSpawned = false;
             blowfishSpawnTime = Math.random() * 60000;
+
+            springTraps = [];
 
             generateTerrain();
 
@@ -3278,13 +3657,16 @@
 
             const updatesPerFrame = gameSpeed;
             for (let i = 0; i < updatesPerFrame; i++) {
-                lemmings.forEach(lemming => lemming.update(cappedDeltaTime));
+                lemmings.forEach(lemming => lemming.update(cappedDeltaTime, gameSpeed));
                 updateParticles();
                 updateSea(cappedDeltaTime);
                 updateManaOrb(cappedDeltaTime);
                 updateNappyPenguin(cappedDeltaTime);
                 updateManaTextAnimations();
                 updatePenguinCountTextAnimations();
+
+                // Update spring traps
+                springTraps.forEach(trap => trap.update(cappedDeltaTime));
             }
 
             fishes.forEach(fish => fish.update(cappedDeltaTime, gameSpeed));
