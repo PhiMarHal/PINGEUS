@@ -478,51 +478,39 @@
         });
 
         const sprites = {
-            igloo: new Image(),
-            ship: new Image(),
-            penguin: new Image(),
-            pudgy_jump: new Image(),
-            pudgy_walk_1: new Image(),
-            pudgy_walk_2: new Image(),
-            pudgy_walk_3: new Image(),
-            pudgy_walk_4: new Image(),
-            pudgy_walk_5: new Image(),
-            pudgy_walk_6: new Image(),
-            ground_1: new Image(),
-            ground_2: new Image(),
-            ground_3: new Image(),
-            ground_4: new Image(),
-            ground_5: new Image(),
-            mana_orb: new Image(),
-            pudgy_nappy: new Image(),
-            fish_orange: new Image(),
-            fish_green: new Image(),
-            fish_blowfish: new Image()
+            igloo: 'igloo.png',
+            ship: 'ship.png',
+            penguin: 'penguin.png',
+            pudgy_jump: 'pudgy_jump.png',
+            pudgy_walk_1: 'pudgy_walk_1.png',
+            pudgy_walk_2: 'pudgy_walk_2.png',
+            pudgy_walk_3: 'pudgy_walk_3.png',
+            pudgy_walk_4: 'pudgy_walk_4.png',
+            pudgy_walk_5: 'pudgy_walk_5.png',
+            pudgy_walk_6: 'pudgy_walk_6.png',
+            ground_1: 'ground_1.png',
+            ground_2: 'ground_2.png',
+            ground_3: 'ground_3.png',
+            ground_4: 'ground_4.png',
+            ground_5: 'ground_5.png',
+            mana_orb: 'mana_orb.png',
+            pudgy_nappy: 'pudgy_nappy.png',
+            fish_orange: 'fish_orange.png',
+            fish_green: 'fish_green.png',
+            fish_blowfish: 'fish_blowfish.png'
         };
 
-        sprites.igloo.src = BASE_URL + 'igloo.png';
-        sprites.ship.src = BASE_URL + 'ship.png';
-        sprites.penguin.src = BASE_URL + 'penguin.png';
-        sprites.pudgy_jump.src = BASE_URL + 'pudgy_jump.png';
-        sprites.pudgy_walk_1.src = BASE_URL + 'pudgy_walk_1.png';
-        sprites.pudgy_walk_2.src = BASE_URL + 'pudgy_walk_2.png';
-        sprites.pudgy_walk_3.src = BASE_URL + 'pudgy_walk_3.png';
-        sprites.pudgy_walk_4.src = BASE_URL + 'pudgy_walk_4.png';
-        sprites.pudgy_walk_5.src = BASE_URL + 'pudgy_walk_5.png';
-        sprites.pudgy_walk_6.src = BASE_URL + 'pudgy_walk_6.png';
-        sprites.ground_1.src = BASE_URL + 'ground_1.png';
-        sprites.ground_2.src = BASE_URL + 'ground_2.png';
-        sprites.ground_3.src = BASE_URL + 'ground_3.png';
-        sprites.ground_4.src = BASE_URL + 'ground_4.png';
-        sprites.ground_5.src = BASE_URL + 'ground_5.png';
-        sprites.mana_orb.src = BASE_URL + 'mana_orb.png';
-        sprites.pudgy_nappy.src = BASE_URL + 'pudgy_nappy.png';
-        sprites.fish_orange.src = BASE_URL + 'fish_orange.png';
-        sprites.fish_green.src = BASE_URL + 'fish_green.png';
-        sprites.fish_blowfish.src = BASE_URL + 'fish_blowfish.png';
-
         let spritesLoaded = 0;
-        const totalSprites = 20;
+        const totalSprites = Object.keys(sprites).length;
+
+        // Loop through and load all sprites
+        for (const key in sprites) {
+            const imageName = sprites[key];
+            sprites[key] = new Image();
+            sprites[key].src = BASE_URL + imageName;
+            sprites[key].onload = onSpriteLoad;
+            sprites[key].onerror = () => console.error(`Failed to load ${imageName}`);
+        }
 
         function onSpriteLoad() {
             spritesLoaded++;
@@ -567,48 +555,6 @@
             }
         }
 
-        sprites.igloo.onload = onSpriteLoad;
-        sprites.ship.onload = onSpriteLoad;
-        sprites.penguin.onload = onSpriteLoad;
-        sprites.pudgy_jump.onload = onSpriteLoad;
-        sprites.pudgy_walk_1.onload = onSpriteLoad;
-        sprites.pudgy_walk_2.onload = onSpriteLoad;
-        sprites.pudgy_walk_3.onload = onSpriteLoad;
-        sprites.pudgy_walk_4.onload = onSpriteLoad;
-        sprites.pudgy_walk_5.onload = onSpriteLoad;
-        sprites.pudgy_walk_6.onload = onSpriteLoad;
-        sprites.ground_1.onload = onSpriteLoad;
-        sprites.ground_2.onload = onSpriteLoad;
-        sprites.ground_3.onload = onSpriteLoad;
-        sprites.ground_4.onload = onSpriteLoad;
-        sprites.ground_5.onload = onSpriteLoad;
-        sprites.mana_orb.onload = onSpriteLoad;
-        sprites.pudgy_nappy.onload = onSpriteLoad;
-        sprites.fish_orange.onload = onSpriteLoad;
-        sprites.fish_green.onload = onSpriteLoad;
-        sprites.fish_blowfish.onload = onSpriteLoad;
-
-        sprites.igloo.onerror = () => console.error('Failed to load igloo.png');
-        sprites.ship.onerror = () => console.error('Failed to load ship.png');
-        sprites.penguin.onerror = () => console.error('Failed to load penguin.png');
-        sprites.pudgy_jump.onerror = () => console.error('Failed to load pudgy_jump.png');
-        sprites.pudgy_walk_1.onerror = () => console.error('Failed to load pudgy_walk_1.png');
-        sprites.pudgy_walk_2.onerror = () => console.error('Failed to load pudgy_walk_2.png');
-        sprites.pudgy_walk_3.onerror = () => console.error('Failed to load pudgy_walk_3.png');
-        sprites.pudgy_walk_4.onerror = () => console.error('Failed to load pudgy_walk_4.png');
-        sprites.pudgy_walk_5.onerror = () => console.error('Failed to load pudgy_walk_5.png');
-        sprites.pudgy_walk_6.onerror = () => console.error('Failed to load pudgy_walk_6.png');
-        sprites.ground_1.onerror = () => console.error('Failed to load ground_1.png');
-        sprites.ground_2.onerror = () => console.error('Failed to load ground_2.png');
-        sprites.ground_3.onerror = () => console.error('Failed to load ground_3.png');
-        sprites.ground_4.onerror = () => console.error('Failed to load ground_4.png');
-        sprites.ground_5.onerror = () => console.error('Failed to load ground_5.png');
-        sprites.mana_orb.onerror = () => console.error('Failed to load mana_orb.png');
-        sprites.pudgy_nappy.onerror = () => console.error('Failed to load pudgy_nappy.png');
-        sprites.fish_orange.onerror = () => console.error('Failed to load fish_orange.png');
-        sprites.fish_green.onerror = () => console.error('Failed to load fish_green.png');
-        sprites.fish_blowfish.onerror = () => console.error('Failed to load fish_blowfish.png');
-
         function startShipSeaRocking() {
             const maxRotation = 4 * Math.PI / 180;
             const swayDuration = 3000;
@@ -641,82 +587,44 @@
             updateBob();
         }
 
-        function pulseManaOrb() {
+        function createPulseAnimation(setter, maxScale, duration) {
             const startTime = Date.now();
-            const duration = 400;
-            const maxScale = 1.2;
 
             function animate() {
                 const elapsed = Date.now() - startTime;
                 const progress = Math.min(elapsed / duration, 1);
+                let newScale;
 
                 if (progress < 0.5) {
                     const t = progress * 2;
-                    manaOrbScale = 1 + (maxScale - 1) * (1 - Math.pow(1 - t, 3));
+                    newScale = 1 + (maxScale - 1) * (1 - Math.pow(1 - t, 3));
                 } else {
                     const t = (progress - 0.5) * 2;
-                    manaOrbScale = maxScale - (maxScale - 1) * (1 - Math.pow(1 - t, 3));
+                    newScale = maxScale - (maxScale - 1) * (1 - Math.pow(1 - t, 3));
                 }
+
+                // Call the setter function directly to update the correct variable
+                setter(newScale);
 
                 if (progress < 1) {
                     requestAnimationFrame(animate);
                 } else {
-                    manaOrbScale = 1;
+                    setter(1); // Reset to base scale
                 }
             }
             animate();
+        }
+
+        function pulseManaOrb() {
+            createPulseAnimation((scale) => { manaOrbScale = scale; }, 1.2, 400);
         }
 
         function pulseIgloo() {
-            const startTime = Date.now();
-            const duration = 400;
-            const maxScale = 1.15;
-
-            function animate() {
-                const elapsed = Date.now() - startTime;
-                const progress = Math.min(elapsed / duration, 1);
-
-                if (progress < 0.5) {
-                    const t = progress * 2;
-                    iglooScale = 1 + (maxScale - 1) * (1 - Math.pow(1 - t, 3));
-                } else {
-                    const t = (progress - 0.5) * 2;
-                    iglooScale = maxScale - (maxScale - 1) * (1 - Math.pow(1 - t, 3));
-                }
-
-                if (progress < 1) {
-                    requestAnimationFrame(animate);
-                } else {
-                    iglooScale = 1;
-                }
-            }
-            animate();
+            createPulseAnimation((scale) => { iglooScale = scale; }, 1.15, 400);
         }
 
         function pulseExit() {
-            const startTime = Date.now();
-            const duration = 400;
-            const maxScale = 1.15;
-
-            function animate() {
-                const elapsed = Date.now() - startTime;
-                const progress = Math.min(elapsed / duration, 1);
-
-                if (progress < 0.5) {
-                    const t = progress * 2;
-                    exitScale = 1 + (maxScale - 1) * (1 - Math.pow(1 - t, 3));
-                } else {
-                    const t = (progress - 0.5) * 2;
-                    exitScale = maxScale - (maxScale - 1) * (1 - Math.pow(1 - t, 3));
-                }
-
-                if (progress < 1) {
-                    requestAnimationFrame(animate);
-                } else {
-                    exitScale = 1;
-                }
-            }
-            animate();
+            createPulseAnimation((scale) => { exitScale = scale; }, 1.15, 400);
         }
 
         class Lemming {
@@ -1601,56 +1509,30 @@
             }
         }
 
-        function updateManaTextAnimations() {
+        function updateTextAnimations(animationArray, yIncrement) {
             const now = Date.now();
+            const duration = 1500;
 
-            manaTextAnimations.forEach(anim => {
+            animationArray.forEach(anim => {
                 const elapsed = now - anim.startTime;
-                const duration = 1500;
                 const progress = elapsed / duration;
 
                 anim.life = 1 - progress;
-                anim.y -= 0.5;
+                anim.y += yIncrement;
             });
 
-            manaTextAnimations = manaTextAnimations.filter(anim => anim.life > 0);
+            // Return a new array containing only the active animations
+            return animationArray.filter(anim => anim.life > 0);
         }
 
-        function updatePenguinCountTextAnimations() {
-            const now = Date.now();
-
-            penguinCountTextAnimations.forEach(anim => {
-                const elapsed = now - anim.startTime;
-                const duration = 1500;
-                const progress = elapsed / duration;
-
-                anim.life = 1 - progress;
-                anim.y += 0.5;
-            });
-
-            penguinCountTextAnimations = penguinCountTextAnimations.filter(anim => anim.life > 0);
-        }
-
-        function drawManaTextAnimations() {
-            manaTextAnimations.forEach(anim => {
+        function drawTextAnimations(animationArray, font, textAlign, textBaseline, color) {
+            animationArray.forEach(anim => {
                 ctx.save();
                 ctx.globalAlpha = anim.life;
-                ctx.font = '48px Luckiest Guy, Arial';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                drawStrokedText(anim.text, anim.x, anim.y, '#00BFFF');
-                ctx.restore();
-            });
-        }
-
-        function drawPenguinCountTextAnimations() {
-            penguinCountTextAnimations.forEach(anim => {
-                ctx.save();
-                ctx.globalAlpha = anim.life;
-                ctx.font = '36px Luckiest Guy, Arial';
-                ctx.textAlign = 'left';
-                ctx.textBaseline = 'alphabetic';
-                drawStrokedText(anim.text, anim.x, anim.y, '#FFD700');
+                ctx.font = font;
+                ctx.textAlign = textAlign;
+                ctx.textBaseline = textBaseline;
+                drawStrokedText(anim.text, anim.x, anim.y, color);
                 ctx.restore();
             });
         }
@@ -3099,8 +2981,8 @@
             drawParticles();
 
             drawUI();
-            drawManaTextAnimations();
-            drawPenguinCountTextAnimations();
+            drawTextAnimations(manaTextAnimations, '48px Luckiest Guy, Arial', 'center', 'middle', '#00BFFF');
+            drawTextAnimations(penguinCountTextAnimations, '36px Luckiest Guy, Arial', 'left', 'alphabetic', '#FFD700');
             drawSpeedButton();
             drawSpellButtons();
         }
@@ -3283,8 +3165,8 @@
                 updateSea(cappedDeltaTime);
                 updateManaOrb(cappedDeltaTime);
                 updateNappyPenguin(cappedDeltaTime);
-                updateManaTextAnimations();
-                updatePenguinCountTextAnimations();
+                manaTextAnimations = updateTextAnimations(manaTextAnimations, -0.5);
+                penguinCountTextAnimations = updateTextAnimations(penguinCountTextAnimations, 0.5);
             }
 
             fishes.forEach(fish => fish.update(cappedDeltaTime, gameSpeed));
