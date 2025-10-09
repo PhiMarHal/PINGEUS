@@ -155,7 +155,7 @@
         const terrainCtx = terrainCanvas.getContext('2d');
 
         // Testing constant - set to 1 for production
-        const STARTING_LEVEL = 1;
+        const STARTING_LEVEL = 16;
 
         // UI Zone - bottom 10% reserved for buttons
         const UI_ZONE_PERCENT = 0.1;
@@ -196,15 +196,12 @@
         let nappyPenguinScale = 1;
         let penguinCountTextAnimations = [];
 
-        // Spring traps state
-        let springTraps = [];
-
         const gameHints = [
             "Ending a level gives you mana. Earlier levels give more mana.",
             "Penguins laugh at gravity. No matter how high the fall.",
             "Each saved penguin is +1 point. Do your best to save them all!",
             "Red and purple spells cost 40 mana. Blue uses mana per length.",
-            "Blue spells are mana efficiency. Keep red and purple for emergencies."
+            "Blue spells are mana efficient. Keep red and purple for emergencies."
         ];
 
         let gameSpeed = 1;
@@ -239,7 +236,7 @@
 
         let fishes = [];
         let lastFishSpawn = 0;
-        const FISH_SPAWN_INTERVAL = 10000;
+        const FISH_SPAWN_INTERVAL = 10000; // 10 seconds
         let fishEatenThisLevel = 0;
         const MAX_FISH_PER_LEVEL = 4;
 
@@ -317,50 +314,9 @@
         let isMusicMuted = false;
         let nextTrackPreloadTimer = null;
 
-        // ===== COLLISION HELPERS =====
-
-        /**
-         * Find the ground level below a given position
-         * Returns the Y coordinate of the ground, or -1 if not found
-         */
-        function findGroundBelow(x, startY, maxDistance = 20) {
-            for (let y = Math.floor(startY); y < Math.min(canvas.height, startY + maxDistance); y++) {
-                if (isSolidPixelCached(x, y)) {
-                    return y;
-                }
-            }
-            return -1;
-        }
-
-        /**
-         * Find the first air space above a given position
-         */
-        function findAirAbove(x, startY, maxDistance = 60) {
-            for (let y = Math.floor(startY); y > Math.max(0, startY - maxDistance); y--) {
-                if (!isSolidPixelCached(x, y)) {
-                    return y;
-                }
-            }
-            return -1;
-        }
-
-        /**
-         * Check if penguin is on solid ground
-         */
-        function isOnGround(x, y, width, height) {
-            const feetY = y + height;
-            const leftX = x + width * 0.3;
-            const rightX = x + width * 0.7;
-            const centerX = x + width / 2;
-
-            // Check if any foot point has ground beneath it (within 1 pixel)
-            return isSolidPixelCached(leftX, feetY + 1) ||
-                isSolidPixelCached(centerX, feetY + 1) ||
-                isSolidPixelCached(rightX, feetY + 1);
-        }
-
         // ===== HELPER FUNCTIONS =====
 
+        // Helper: Draw text with stroke and fill
         function drawStrokedText(text, x, y, fillColor = '#FFFFFF', strokeColor = '#000000', strokeWidth = 3) {
             ctx.strokeStyle = strokeColor;
             ctx.lineWidth = strokeWidth;
@@ -369,10 +325,12 @@
             ctx.fillText(text, x, y);
         }
 
+        // Helper: Calculate sine wave position for swimming entities
         function calculateSineWaveY(centerY, amplitude, phase) {
             return centerY + Math.sin(phase) * amplitude;
         }
 
+        // Helper: Check collision between entity and lemming
         function checkEntityLemmingCollision(entityX, entityY, collisionWidth, collisionHeight, lemming) {
             if (!lemming.alive) return false;
 
@@ -385,14 +343,18 @@
                 Math.abs(lemmingCenterY - entityY) < halfCollisionHeight;
         }
 
+        // Helper: Update sine wave swimming entity
         function updateSineWaveMovement(entity, deltaTime, gameSpeed) {
             const dt = deltaTime / 1000;
 
+            // Update horizontal speed based on game speed
             entity.vx = entity.baseVx * gameSpeed;
             entity.waveSpeed = entity.baseWaveSpeed * gameSpeed;
 
+            // Horizontal movement
             entity.x += entity.vx * dt;
 
+            // Sine wave vertical movement
             entity.wavePhase += entity.waveSpeed * deltaTime;
             entity.y = calculateSineWaveY(entity.centerY, entity.waveAmplitude, entity.wavePhase);
         }
@@ -535,9 +497,7 @@
             pudgy_nappy: new Image(),
             fish_orange: new Image(),
             fish_green: new Image(),
-            fish_blowfish: new Image(),
-            spring_trap_idle: new Image(),
-            spring_trap_active: new Image()
+            fish_blowfish: new Image()
         };
 
         sprites.igloo.src = BASE_URL + 'igloo.png';
@@ -560,11 +520,9 @@
         sprites.fish_orange.src = BASE_URL + 'fish_orange.png';
         sprites.fish_green.src = BASE_URL + 'fish_green.png';
         sprites.fish_blowfish.src = BASE_URL + 'fish_blowfish.png';
-        sprites.spring_trap_idle.src = BASE_URL + 'spring_trap_idle.png';
-        sprites.spring_trap_active.src = BASE_URL + 'spring_trap_active.png';
 
         let spritesLoaded = 0;
-        const totalSprites = 22;
+        const totalSprites = 20;
 
         function onSpriteLoad() {
             spritesLoaded++;
@@ -629,8 +587,6 @@
         sprites.fish_orange.onload = onSpriteLoad;
         sprites.fish_green.onload = onSpriteLoad;
         sprites.fish_blowfish.onload = onSpriteLoad;
-        sprites.spring_trap_idle.onload = onSpriteLoad;
-        sprites.spring_trap_active.onload = onSpriteLoad;
 
         sprites.igloo.onerror = () => console.error('Failed to load igloo.png');
         sprites.ship.onerror = () => console.error('Failed to load ship.png');
@@ -652,8 +608,6 @@
         sprites.fish_orange.onerror = () => console.error('Failed to load fish_orange.png');
         sprites.fish_green.onerror = () => console.error('Failed to load fish_green.png');
         sprites.fish_blowfish.onerror = () => console.error('Failed to load fish_blowfish.png');
-        sprites.spring_trap_idle.onerror = () => console.error('Failed to load spring_trap_idle.png');
-        sprites.spring_trap_active.onerror = () => console.error('Failed to load spring_trap_active.png');
 
         function startShipSeaRocking() {
             const maxRotation = 4 * Math.PI / 180;
@@ -775,184 +729,23 @@
                 this.height = 38;
                 this.alive = true;
                 this.lastAction = "spawned";
+                this.justSteppedUp = false;
                 this.swimming = false;
                 this.bobPhase = Math.random() * Math.PI * 2;
                 this.animationFrame = 0;
                 this.lastAnimationTime = performance.now();
                 this.animationInterval = 125;
-
-                // Flying/force state
-                this.isFlying = false;
-                this.flyVx = 0;
-                this.flyVy = 0;
-                this.spinAngle = 0;
-                this.spinSpeed = 0;
             }
 
-            launchFromSpring(angle, speed) {
-                this.isFlying = true;
-                this.flyVx = Math.cos(angle) * speed;
-                this.flyVy = -Math.sin(angle) * speed;
-                this.spinSpeed = 720;
-                this.spinAngle = 0;
-                this.vy = 0;
-            }
-
-            updateFlying(deltaTime, currentGameSpeed) {
-                const dt = (deltaTime / 1000) / currentGameSpeed;
-
-                // Apply gravity
-                this.flyVy += 500 * dt;
-
-                // Update spin
-                this.spinAngle += this.spinSpeed * dt;
-
-                // Calculate movement distance
-                const dx = this.flyVx * dt;
-                const dy = this.flyVy * dt;
-                const distance = Math.hypot(dx, dy);
-
-                // Swept collision - check multiple points along path
-                const steps = Math.max(1, Math.ceil(distance / 3));
-
-                for (let step = 1; step <= steps; step++) {
-                    const t = step / steps;
-                    const newX = this.x + dx * t;
-                    const newY = this.y + dy * t;
-
-                    const centerX = newX + this.width / 2;
-                    const centerY = newY + this.height / 2;
-                    const topY = newY + 3;
-                    const bottomY = newY + this.height - 3;
-
-                    // Check for collision
-                    let hitSomething = false;
-                    let hitCeiling = false;
-                    let hitFloor = false;
-
-                    // Top collision (ceiling)
-                    if (this.flyVy < 0) {
-                        if (isSolidPixelCached(centerX, topY) ||
-                            isSolidPixelCached(centerX - this.width / 4, topY) ||
-                            isSolidPixelCached(centerX + this.width / 4, topY)) {
-                            hitCeiling = true;
-                            hitSomething = true;
-                        }
-                    }
-
-                    // Bottom collision (floor)
-                    if (this.flyVy > 0) {
-                        if (isSolidPixelCached(centerX, bottomY) ||
-                            isSolidPixelCached(centerX - this.width / 4, bottomY) ||
-                            isSolidPixelCached(centerX + this.width / 4, bottomY)) {
-                            hitFloor = true;
-                            hitSomething = true;
-                        }
-                    }
-
-                    // Center stuck in terrain
-                    if (isSolidPixelCached(centerX, centerY)) {
-                        hitSomething = true;
-
-                        // Try to extract upward
-                        const airY = findAirAbove(centerX, centerY, 40);
-                        if (airY !== -1) {
-                            this.y = airY;
-                            this.isFlying = false;
-                            this.flyVx = 0;
-                            this.flyVy = 0;
-                            this.vy = 0;
-                            this.spinAngle = 0;
-                            return;
-                        }
-                    }
-
-                    if (hitSomething) {
-                        if (hitCeiling) {
-                            // Hit ceiling - stop and fall
-                            this.isFlying = false;
-                            this.flyVx = 0;
-                            this.flyVy = 0;
-                            this.vy = 0;
-                            this.spinAngle = 0;
-                            return;
-                        } else if (hitFloor) {
-                            // Land on ground
-                            const groundY = findGroundBelow(centerX, bottomY, 10);
-                            if (groundY !== -1) {
-                                this.y = groundY - this.height;
-                            }
-                            this.isFlying = false;
-                            this.flyVx = 0;
-                            this.flyVy = 0;
-                            this.vy = 0;
-                            this.spinAngle = 0;
-                            this.createLandingParticles();
-                            return;
-                        }
-                        return;
-                    }
-
-                    // No collision at this substep, continue
-                    this.x = newX;
-                    this.y = newY;
-                }
-
-                // Boundary checks
-                if (this.x < 0) {
-                    this.x = 0;
-                    this.flyVx = Math.abs(this.flyVx) * 0.3;
-                }
-                if (this.x + this.width > canvas.width) {
-                    this.x = canvas.width - this.width;
-                    this.flyVx = -Math.abs(this.flyVx) * 0.3;
-                }
-                if (this.y < 0) {
-                    this.y = 0;
-                    this.flyVy = Math.abs(this.flyVy) * 0.3;
-                }
-                if (this.y + this.height > canvas.height) {
-                    this.alive = false;
-                }
-            }
-
-            createLandingParticles() {
-                const colors = ['#FFFFFF', '#DDDDDD', '#CCCCCC'];
-                const numParticles = 8;
-
-                for (let i = 0; i < numParticles; i++) {
-                    const angle = Math.random() * Math.PI;
-                    const speed = 1 + Math.random() * 2;
-                    const color = colors[Math.floor(Math.random() * colors.length)];
-
-                    particles.push({
-                        x: this.x + this.width / 2,
-                        y: this.y + this.height,
-                        vx: Math.cos(angle) * speed,
-                        vy: -Math.sin(angle) * speed,
-                        life: 0.8,
-                        decay: 0.015,
-                        color: color
-                    });
-                }
-            }
-
-            update(deltaTime = 16.67, currentGameSpeed = 1) {
+            update(deltaTime = 16.67) {
                 if (!this.alive) return;
 
-                // If flying, use flying physics
-                if (this.isFlying) {
-                    this.updateFlying(deltaTime, currentGameSpeed);
-                    this.checkCollectibles();
-                    return;
-                }
-
                 const dt = deltaTime / 1000;
+
                 const direction = this.vx > 0 ? 1 : -1;
                 const groundCheckX = this.x + this.width / 2 + (direction * this.width / 4);
                 const feetY = this.y + this.height;
 
-                // Check if in swimming zone
                 if (feetY >= UI_ZONE_Y) {
                     if (!this.swimming) {
                         this.swimming = true;
@@ -960,18 +753,16 @@
                     }
                 }
 
-                // Swimming behavior
                 if (this.swimming) {
                     this.bobPhase += 0.1 * (deltaTime / 16.67);
                     const bobOffset = Math.sin(this.bobPhase) * 5;
                     this.y = UI_ZONE_Y - this.height + 10 + bobOffset;
+
                     this.x += this.vx * dt;
 
-                    // Check if can climb back onto land
                     if (isSolidPixelCached(groundCheckX, feetY - 20)) {
                         this.swimming = false;
                         this.vy = 0;
-                        // Find ground surface
                         for (let checkY = feetY - 30; checkY <= feetY; checkY++) {
                             if (isSolidPixelCached(groundCheckX, checkY)) {
                                 this.y = checkY - this.height;
@@ -981,37 +772,29 @@
                     }
 
                     this.lastAction = "swimming";
-                    this.checkCollectibles();
-                    return;
-                }
-
-                // Check if on ground
-                const onGround = isOnGround(this.x, this.y, this.width, this.height);
-
-                if (!onGround) {
-                    // Falling
+                } else if (!isSolidPixelCached(groundCheckX, feetY + 1)) {
                     this.vy += 10368 * dt;
                     this.vy = Math.min(this.vy, 1440);
 
                     const fallDistance = this.vy * dt;
-                    const steps = Math.ceil(fallDistance / 2);
-                    const stepSize = fallDistance / steps;
+                    const oldY = this.y;
                     let landed = false;
 
-                    for (let step = 1; step <= steps; step++) {
-                        const checkY = this.y + stepSize * step;
+                    const steps = Math.ceil(fallDistance / 2);
+                    const stepSize = fallDistance / steps;
 
-                        if (isOnGround(this.x, checkY, this.width, this.height)) {
+                    for (let step = 1; step <= steps; step++) {
+                        const checkY = oldY + stepSize * step;
+                        const checkFeetY = checkY + this.height;
+
+                        if (isSolidPixelCached(groundCheckX, checkFeetY)) {
                             this.y = checkY;
                             this.vy = 0;
                             landed = true;
 
-                            // Snap to ground surface gently
-                            const centerX = this.x + this.width / 2;
-                            const checkFeetY = this.y + this.height;
-                            for (let dy = -2; dy <= 2; dy++) {
-                                if (isSolidPixelCached(centerX, checkFeetY + dy)) {
-                                    this.y = checkFeetY + dy - this.height;
+                            for (let checkY2 = checkFeetY - 3; checkY2 <= checkFeetY + 3; checkY2++) {
+                                if (isSolidPixelCached(groundCheckX, checkY2)) {
+                                    this.y = checkY2 - this.height;
                                     break;
                                 }
                             }
@@ -1024,13 +807,24 @@
                     }
 
                     this.lastAction = "falling";
+                    this.justSteppedUp = false;
                 } else {
-                    // On ground - walk
                     this.vy = 0;
-                    this.attemptWalking(dt);
+
+                    if (!this.justSteppedUp) {
+                        for (let checkY = feetY - 3; checkY <= feetY + 3; checkY++) {
+                            if (isSolidPixelCached(groundCheckX, checkY)) {
+                                this.y = checkY - this.height;
+                                break;
+                            }
+                        }
+                    } else {
+                        this.justSteppedUp = false;
+                    }
+
+                    this.attemptMovement(dt);
                 }
 
-                // Boundary checks
                 if (this.x <= 0 || this.x >= canvas.width - this.width) {
                     this.vx = -this.vx;
                     if (this.x <= 0) {
@@ -1041,92 +835,6 @@
                     this.lastAction = "hit boundary";
                 }
 
-                this.checkCollectibles();
-            }
-
-            attemptWalking(dt) {
-                const direction = this.vx > 0 ? 1 : -1;
-                const speed = Math.abs(this.vx);
-                const moveDistance = direction * speed * dt;
-                const newX = this.x + moveDistance;
-
-                const checkX = direction > 0 ? newX + this.width : newX;
-                const bodyY = this.y + this.height / 2;
-                const feetY = this.y + this.height;
-                const centerX = newX + this.width / 2;
-
-                // Check if there's ANY solid ahead at body height (including blue ramps)
-                const solidAhead = isSolidPixelCached(checkX, bodyY);
-
-                if (solidAhead) {
-                    // Something blocking - try to step up
-                    const stepHeight = 16;
-                    const stepUpY = this.y - stepHeight;
-                    const stepCheckX = checkX;
-                    const stepCheckBodyY = stepUpY + this.height / 2;
-                    const stepCheckTop = stepUpY + 5;
-
-                    // Check if there's space to step up (must be clear at body and top)
-                    const canStepUp = !isSolidIgnoringBlueRampsCached(stepCheckX, stepCheckBodyY) &&
-                        !isSolidIgnoringBlueRampsCached(stepCheckX, stepCheckTop);
-
-                    if (canStepUp) {
-                        // Step up successfully
-                        this.x = newX;
-                        this.y = stepUpY;
-                        this.lastAction = "stepped up";
-                    } else {
-                        // Can't step up - turn around
-                        this.vx = -this.vx;
-                        this.lastAction = "hit wall - turning";
-                    }
-                } else {
-                    // No solid at body height - check ground level changes for slope climbing
-                    const currentGroundY = findGroundBelow(this.x + this.width / 2, feetY - 1, 5);
-                    const futureGroundY = findGroundBelow(centerX, feetY - 1, 20);
-
-                    if (currentGroundY !== -1 && futureGroundY !== -1) {
-                        const heightDiff = currentGroundY - futureGroundY;
-
-                        if (heightDiff > 0) {
-                            // Ground ahead is higher - climbing upward
-                            // Limit climb rate to 3 pixels per frame for smooth movement
-                            const maxClimbThisFrame = 3;
-                            const actualClimb = Math.min(heightDiff, maxClimbThisFrame);
-
-                            if (heightDiff <= 16) {
-                                // Gradual slope - climb smoothly
-                                this.x = newX;
-                                this.y -= actualClimb;
-                                this.lastAction = "climbing slope";
-                            } else {
-                                // Too steep without clear step - turn around
-                                this.vx = -this.vx;
-                                this.lastAction = "too steep";
-                            }
-                        } else if (heightDiff < -3) {
-                            // Ground ahead is lower - descending
-                            // Limit descent rate for smoothness
-                            const maxDescendThisFrame = 3;
-                            const actualDescend = Math.min(-heightDiff, maxDescendThisFrame);
-
-                            this.x = newX;
-                            this.y += actualDescend;
-                            this.lastAction = "descending slope";
-                        } else {
-                            // Flat or minimal change - walk normally
-                            this.x = newX;
-                            this.lastAction = "walking";
-                        }
-                    } else {
-                        // No ground info - just move
-                        this.x = newX;
-                        this.lastAction = "walking";
-                    }
-                }
-            }
-
-            checkCollectibles() {
                 // Check mana orb collision
                 if (manaOrb && manaOrb.active) {
                     const dx = (this.x + this.width / 2) - manaOrb.x;
@@ -1161,14 +869,6 @@
                     collectBlowfish();
                 }
 
-                // Check spring trap collision
-                springTraps.forEach(trap => {
-                    if (trap.checkCollisionWithLemming(this)) {
-                        trap.activate(this);
-                    }
-                });
-
-                // Check exit
                 if (exit && this.distance(this.x + this.width / 2, this.y + this.height / 2, exit.x, exit.y) < 60) {
                     this.alive = false;
                     lemmingsSaved++;
@@ -1178,7 +878,38 @@
                     scoreAnimation.startTime = Date.now();
 
                     pulseExit();
+                    return;
                 }
+            }
+
+            attemptMovement(dt) {
+                const direction = this.vx > 0 ? 1 : -1;
+                const speed = Math.abs(this.vx);
+                const newX = this.x + direction * speed * dt;
+                const bodyY = this.y + this.height / 2;
+                const feetY = this.y + this.height;
+
+                const wallCheckX = direction > 0 ? newX + this.width : newX;
+
+                if (isSolidIgnoringBlueRampsCached(wallCheckX, bodyY)) {
+                    const stepHeight = 16;
+                    const stepUpY = feetY - stepHeight;
+
+                    if (!isSolidIgnoringBlueRampsCached(wallCheckX, stepUpY) && !isSolidIgnoringBlueRampsCached(wallCheckX, stepUpY - this.height)) {
+                        this.x = newX;
+                        this.y -= stepHeight;
+                        //this.justSteppedUp = true;
+                        this.lastAction = "stepped up 16px";
+                        return;
+                    } else {
+                        this.vx = -this.vx;
+                        this.lastAction = "hit wall - turning";
+                        return;
+                    }
+                }
+
+                this.x = newX;
+                this.lastAction = "walking";
             }
 
             distance(x1, y1, x2, y2) {
@@ -1194,18 +925,6 @@
                 const spriteHeight = 60;
                 const offsetX = (spriteWidth - this.width) / 2;
                 const offsetY = (spriteHeight - this.height) / 2;
-
-                // If flying, draw spinning jump sprite
-                if (this.isFlying) {
-                    const drawX = this.x + this.width / 2;
-                    const drawY = this.y + this.height / 2;
-
-                    ctx.translate(drawX, drawY);
-                    ctx.rotate(this.spinAngle * Math.PI / 180);
-                    ctx.drawImage(sprites.pudgy_jump, -spriteWidth / 2, -spriteHeight / 2, spriteWidth, spriteHeight);
-                    ctx.restore();
-                    return;
-                }
 
                 const now = performance.now();
                 if (now - this.lastAnimationTime >= this.animationInterval) {
@@ -1232,101 +951,6 @@
                     ctx.drawImage(currentSprite, 0, 0, spriteWidth, spriteHeight);
                 } else {
                     ctx.drawImage(currentSprite, this.x - offsetX, this.y - offsetY, spriteWidth, spriteHeight);
-                }
-
-                ctx.restore();
-            }
-        }
-
-        class SpringTrap {
-            constructor(x, y) {
-                this.x = x;
-                this.y = y;
-                this.size = 72;
-                this.collisionRadius = 45;
-                this.active = false;
-                this.cooldown = 0;
-                this.cooldownDuration = 2000;
-                this.launchAngle = 0;
-            }
-
-            checkCollisionWithLemming(lemming) {
-                if (!lemming.alive || lemming.isFlying || this.cooldown > 0) return false;
-
-                const lemmingCenterX = lemming.x + lemming.width / 2;
-                const lemmingCenterY = lemming.y + lemming.height / 2;
-
-                const dx = lemmingCenterX - this.x;
-                const dy = lemmingCenterY - this.y;
-                const distance = Math.sqrt(dx * dx + dy * dy);
-
-                return distance < this.collisionRadius;
-            }
-
-            activate(lemming) {
-                // Random angle in upper hemisphere (0 to 180 degrees)
-                const angleInDegrees = Math.random() * 180;
-                const angleInRadians = (angleInDegrees * Math.PI) / 180;
-                const speed = 300 + Math.random() * 200;
-
-                this.launchAngle = angleInRadians;
-
-                // Launch the penguin
-                lemming.launchFromSpring(angleInRadians, speed);
-
-                // Set trap to active state
-                this.active = true;
-                this.cooldown = this.cooldownDuration;
-
-                // Create activation particles
-                this.createActivationParticles();
-
-                // Reset to idle after a short time
-                setTimeout(() => {
-                    this.active = false;
-                }, 300);
-            }
-
-            createActivationParticles() {
-                const colors = ['#FF6B6B', '#FFA500', '#FFD700', '#FF4444'];
-                const numParticles = 12;
-
-                for (let i = 0; i < numParticles; i++) {
-                    const angle = Math.random() * Math.PI;
-                    const speed = 2 + Math.random() * 3;
-                    const color = colors[Math.floor(Math.random() * colors.length)];
-
-                    particles.push({
-                        x: this.x,
-                        y: this.y,
-                        vx: Math.cos(angle) * speed,
-                        vy: -Math.sin(angle) * speed - 2,
-                        life: 1.0,
-                        decay: 0.012,
-                        color: color
-                    });
-                }
-            }
-
-            update(deltaTime) {
-                if (this.cooldown > 0) {
-                    this.cooldown -= deltaTime;
-                    if (this.cooldown < 0) this.cooldown = 0;
-                }
-            }
-
-            draw() {
-                const sprite = this.active ? sprites.spring_trap_active : sprites.spring_trap_idle;
-
-                ctx.save();
-
-                if (this.active) {
-                    const activeSize = this.size * 1.5;
-                    ctx.translate(this.x, this.y);
-                    ctx.rotate(Math.PI / 2 - this.launchAngle);
-                    ctx.drawImage(sprite, -activeSize / 2, -activeSize / 2, activeSize, activeSize);
-                } else {
-                    ctx.drawImage(sprite, this.x - this.size / 2, this.y - this.size / 2, this.size, this.size);
                 }
 
                 ctx.restore();
@@ -1434,6 +1058,7 @@
 
                 updateSineWaveMovement(this, deltaTime, currentGameSpeed);
 
+                // Check if off screen
                 if (this.movingRight && this.x > canvas.width + 60) {
                     this.active = false;
                 } else if (!this.movingRight && this.x < -60) {
@@ -1454,6 +1079,7 @@
                 const drawWidth = this.width;
                 const drawHeight = this.height;
 
+                // Always treat this.x, this.y as the center
                 if (!this.movingRight) {
                     ctx.translate(this.x, this.y);
                     ctx.scale(-1, 1);
@@ -1489,6 +1115,7 @@
                 this.wavePhase = Math.random() * Math.PI * 2;
                 this.baseWaveSpeed = 0.0015;
 
+                // Calculate vx and waveSpeed based on direction
                 this.baseVx = this.movingRight ? this.baseSpeed : -this.baseSpeed;
                 this.vx = this.baseVx;
                 this.waveSpeed = this.baseWaveSpeed;
@@ -1509,10 +1136,12 @@
 
                 const dt = deltaTime / 1000;
 
+                // Update speed based on current direction
                 this.baseVx = this.movingRight ? this.baseSpeed : -this.baseSpeed;
 
                 updateSineWaveMovement(this, deltaTime, currentGameSpeed);
 
+                // Check bounds and reverse direction
                 if (this.x <= 80) {
                     this.x = 80;
                     this.movingRight = true;
@@ -1535,6 +1164,7 @@
                 const drawWidth = this.width;
                 const drawHeight = this.height;
 
+                // Always treat this.x, this.y as the center
                 if (!this.movingRight) {
                     ctx.translate(this.x, this.y);
                     ctx.scale(-1, 1);
@@ -1646,47 +1276,7 @@
             findSpawnPoints();
             spawnManaOrb();
             spawnNappyPenguin();
-            spawnSpringTraps();
             drawStaticTerrain();
-        }
-
-        function spawnSpringTraps() {
-            springTraps = [];
-
-            if (currentLevel < 5) return;
-
-            const numTraps = Math.min(1 + Math.floor((currentLevel - 5) / 3), 4);
-            const bottomSafeZone = UI_ZONE_Y - 50;
-            const scanStep = 30;
-            const surfacePoints = [];
-
-            for (let x = 100; x < canvas.width - 100; x += scanStep) {
-                for (let y = 150; y < bottomSafeZone; y += scanStep) {
-                    if (isTerrainAt(x, y)) {
-                        const hasSpaceAbove = !isTerrainAt(x, y - 40) && !isTerrainAt(x, y - 25);
-
-                        if (hasSpaceAbove) {
-                            const leftOk = isTerrainAt(x - scanStep, y) || isTerrainAt(x - scanStep, y + 12);
-                            const rightOk = isTerrainAt(x + scanStep, y) || isTerrainAt(x + scanStep, y + 12);
-
-                            if (leftOk && rightOk) {
-                                const tooCloseToEntrance = entrance && distance(x, y, entrance.x, entrance.y) < 180;
-                                const tooCloseToExit = exit && distance(x, y, exit.x, exit.y) < 180;
-
-                                if (!tooCloseToEntrance && !tooCloseToExit) {
-                                    surfacePoints.push({ x, y });
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            for (let i = 0; i < numTraps && surfacePoints.length > 0; i++) {
-                const randomIndex = Math.floor(Math.random() * surfacePoints.length);
-                const spawnPoint = surfacePoints.splice(randomIndex, 1)[0];
-                springTraps.push(new SpringTrap(spawnPoint.x, spawnPoint.y - 24));
-            }
         }
 
         function spawnManaOrb() {
@@ -2500,6 +2090,7 @@
             particles.forEach(p => {
                 p.x += p.vx;
                 p.y += p.vy;
+                // Only apply gravity if particle doesn't have noGravity flag
                 if (!p.noGravity) {
                     p.vy += 0.1;
                 }
@@ -2999,7 +2590,6 @@
             blowfish = null;
             blowfishHasSpawned = false;
             blowfishSpawnTime = Math.random() * 60000;
-            springTraps = [];
 
             generateTerrain();
             gameStartTime = Date.now();
@@ -3457,9 +3047,6 @@
             }
 
             drawStaticTerrain();
-
-            springTraps.forEach(trap => trap.draw());
-
             drawSea();
 
             fishes.forEach(fish => fish.draw());
@@ -3560,8 +3147,6 @@
             blowfish = null;
             blowfishHasSpawned = false;
             blowfishSpawnTime = Math.random() * 60000;
-
-            springTraps = [];
 
             generateTerrain();
 
@@ -3669,6 +3254,7 @@
                 blowfishHasSpawned = true;
             }
 
+            // Generate energy particles radiating from blowfish
             if (blowfish && blowfish.active && !blowfish.collected) {
                 if (currentTime - blowfish.lastParticleTime > 250 / gameSpeed) {
                     blowfish.lastParticleTime = currentTime;
@@ -3692,15 +3278,13 @@
 
             const updatesPerFrame = gameSpeed;
             for (let i = 0; i < updatesPerFrame; i++) {
-                lemmings.forEach(lemming => lemming.update(cappedDeltaTime, gameSpeed));
+                lemmings.forEach(lemming => lemming.update(cappedDeltaTime));
                 updateParticles();
                 updateSea(cappedDeltaTime);
                 updateManaOrb(cappedDeltaTime);
                 updateNappyPenguin(cappedDeltaTime);
                 updateManaTextAnimations();
                 updatePenguinCountTextAnimations();
-
-                springTraps.forEach(trap => trap.update(cappedDeltaTime));
             }
 
             fishes.forEach(fish => fish.update(cappedDeltaTime, gameSpeed));
