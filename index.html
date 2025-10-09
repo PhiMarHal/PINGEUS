@@ -636,8 +636,6 @@
                 this.width = 25;
                 this.height = 38;
                 this.alive = true;
-                this.lastAction = "spawned";
-                this.justSteppedUp = false;
                 this.swimming = false;
                 this.bobPhase = Math.random() * Math.PI * 2;
                 this.animationFrame = 0;
@@ -661,6 +659,26 @@
                     }
                 }
 
+                // Check for ceiling collision when moving upward - EXPERIMENTAL
+                if (this.vy < 0) {
+                    const headY = this.y;
+                    const centerX = this.x + this.width / 2;
+
+                    if (isSolidPixelCached(centerX, headY)) {
+                        this.vy = 0;
+
+                        for (let pushDown = 0; pushDown < 2; pushDown++) {
+                            if (!isSolidPixelCached(centerX, headY + pushDown)) {
+                                this.y = headY + pushDown;
+                                break;
+                            }
+                        }
+
+                        this.lastAction = "hit ceiling";
+                    }
+                }
+
+                // Swimming behavior
                 if (this.swimming) {
                     this.bobPhase += 0.1 * (deltaTime / 16.67);
                     const bobOffset = Math.sin(this.bobPhase) * 5;
@@ -679,7 +697,7 @@
                         }
                     }
 
-                    this.lastAction = "swimming";
+                    // Falling behavior
                 } else if (!isSolidPixelCached(groundCheckX, feetY + 1)) {
                     this.vy += 10368 * dt;
                     this.vy = Math.min(this.vy, 1440);
@@ -714,25 +732,21 @@
                         this.y += fallDistance;
                     }
 
-                    this.lastAction = "falling";
-                    this.justSteppedUp = false;
+                    // Walking behavior
                 } else {
                     this.vy = 0;
 
-                    if (!this.justSteppedUp) {
-                        for (let checkY = feetY - 3; checkY <= feetY + 3; checkY++) {
-                            if (isSolidPixelCached(groundCheckX, checkY)) {
-                                this.y = checkY - this.height;
-                                break;
-                            }
+                    for (let checkY = feetY - 3; checkY <= feetY + 3; checkY++) {
+                        if (isSolidPixelCached(groundCheckX, checkY)) {
+                            this.y = checkY - this.height;
+                            break;
                         }
-                    } else {
-                        this.justSteppedUp = false;
                     }
 
                     this.attemptMovement(dt);
                 }
 
+                // Making sure our penguins stay in canvas
                 if (this.x <= 0 || this.x >= canvas.width - this.width) {
                     this.vx = -this.vx;
                     if (this.x <= 0) {
@@ -740,7 +754,6 @@
                     } else {
                         this.x = canvas.width - this.width - 1;
                     }
-                    this.lastAction = "hit boundary";
                 }
 
                 // Check mana orb collision
@@ -777,6 +790,7 @@
                     collectBlowfish();
                 }
 
+                // Reaching the igloo
                 if (exit && this.distance(this.x + this.width / 2, this.y + this.height / 2, exit.x, exit.y) < 60) {
                     this.alive = false;
                     lemmingsSaved++;
@@ -806,18 +820,14 @@
                     if (!isSolidIgnoringBlueRampsCached(wallCheckX, stepUpY) && !isSolidIgnoringBlueRampsCached(wallCheckX, stepUpY - this.height)) {
                         this.x = newX;
                         this.y -= stepHeight;
-                        //this.justSteppedUp = true;
-                        this.lastAction = "stepped up 16px";
                         return;
                     } else {
                         this.vx = -this.vx;
-                        this.lastAction = "hit wall - turning";
                         return;
                     }
                 }
 
                 this.x = newX;
-                this.lastAction = "walking";
             }
 
             distance(x1, y1, x2, y2) {
