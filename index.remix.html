@@ -201,7 +201,7 @@
             "Penguins laugh at gravity. No matter how high the fall.",
             "Each saved penguin is +1 point. Do your best to save them all!",
             "Red and purple spells cost 40 mana. Blue uses mana per length.",
-            "Blue spells are mana efficiency. Keep red and purple for emergencies."
+            "Blue spells are mana efficient. Keep red and purple for emergencies."
         ];
 
         let gameSpeed = 1;
@@ -243,8 +243,6 @@
         let blowfish = null;
         let blowfishSpawnTime = 0;
         let blowfishHasSpawned = false;
-        let blowfishScale = 1;
-        let blowfishAlpha = 1;
 
         let scoreAnimation = { active: false, scale: 1, startTime: 0 };
         let manaAnimation = { active: false, shake: 0, startTime: 0 };
@@ -480,51 +478,39 @@
         });
 
         const sprites = {
-            igloo: new Image(),
-            ship: new Image(),
-            penguin: new Image(),
-            pudgy_jump: new Image(),
-            pudgy_walk_1: new Image(),
-            pudgy_walk_2: new Image(),
-            pudgy_walk_3: new Image(),
-            pudgy_walk_4: new Image(),
-            pudgy_walk_5: new Image(),
-            pudgy_walk_6: new Image(),
-            ground_1: new Image(),
-            ground_2: new Image(),
-            ground_3: new Image(),
-            ground_4: new Image(),
-            ground_5: new Image(),
-            mana_orb: new Image(),
-            pudgy_nappy: new Image(),
-            fish_orange: new Image(),
-            fish_green: new Image(),
-            fish_blowfish: new Image()
+            igloo: 'igloo.png',
+            ship: 'ship.png',
+            penguin: 'penguin.png',
+            pudgy_jump: 'pudgy_jump.png',
+            pudgy_walk_1: 'pudgy_walk_1.png',
+            pudgy_walk_2: 'pudgy_walk_2.png',
+            pudgy_walk_3: 'pudgy_walk_3.png',
+            pudgy_walk_4: 'pudgy_walk_4.png',
+            pudgy_walk_5: 'pudgy_walk_5.png',
+            pudgy_walk_6: 'pudgy_walk_6.png',
+            ground_1: 'ground_1.png',
+            ground_2: 'ground_2.png',
+            ground_3: 'ground_3.png',
+            ground_4: 'ground_4.png',
+            ground_5: 'ground_5.png',
+            mana_orb: 'mana_orb.png',
+            pudgy_nappy: 'pudgy_nappy.png',
+            fish_orange: 'fish_orange.png',
+            fish_green: 'fish_green.png',
+            fish_blowfish: 'fish_blowfish.png'
         };
 
-        sprites.igloo.src = BASE_URL + 'igloo.png';
-        sprites.ship.src = BASE_URL + 'ship.png';
-        sprites.penguin.src = BASE_URL + 'penguin.png';
-        sprites.pudgy_jump.src = BASE_URL + 'pudgy_jump.png';
-        sprites.pudgy_walk_1.src = BASE_URL + 'pudgy_walk_1.png';
-        sprites.pudgy_walk_2.src = BASE_URL + 'pudgy_walk_2.png';
-        sprites.pudgy_walk_3.src = BASE_URL + 'pudgy_walk_3.png';
-        sprites.pudgy_walk_4.src = BASE_URL + 'pudgy_walk_4.png';
-        sprites.pudgy_walk_5.src = BASE_URL + 'pudgy_walk_5.png';
-        sprites.pudgy_walk_6.src = BASE_URL + 'pudgy_walk_6.png';
-        sprites.ground_1.src = BASE_URL + 'ground_1.png';
-        sprites.ground_2.src = BASE_URL + 'ground_2.png';
-        sprites.ground_3.src = BASE_URL + 'ground_3.png';
-        sprites.ground_4.src = BASE_URL + 'ground_4.png';
-        sprites.ground_5.src = BASE_URL + 'ground_5.png';
-        sprites.mana_orb.src = BASE_URL + 'mana_orb.png';
-        sprites.pudgy_nappy.src = BASE_URL + 'pudgy_nappy.png';
-        sprites.fish_orange.src = BASE_URL + 'fish_orange.png';
-        sprites.fish_green.src = BASE_URL + 'fish_green.png';
-        sprites.fish_blowfish.src = BASE_URL + 'fish_blowfish.png';
-
         let spritesLoaded = 0;
-        const totalSprites = 20;
+        const totalSprites = Object.keys(sprites).length;
+
+        // Loop through and load all sprites
+        for (const key in sprites) {
+            const imageName = sprites[key];
+            sprites[key] = new Image();
+            sprites[key].src = BASE_URL + imageName;
+            sprites[key].onload = onSpriteLoad;
+            sprites[key].onerror = () => console.error(`Failed to load ${imageName}`);
+        }
 
         function onSpriteLoad() {
             spritesLoaded++;
@@ -564,52 +550,10 @@
                 currentSkyColor = '#c8fc8c';
             } else {
                 groundPattern = terrainCtx.createPattern(sprites.ground_5, 'repeat');
-                currentOutlineColor = '#202020';
-                currentSkyColor = '#EE4B2B';
+                currentOutlineColor = '#5A5A5A';
+                currentSkyColor = '#FF3333';
             }
         }
-
-        sprites.igloo.onload = onSpriteLoad;
-        sprites.ship.onload = onSpriteLoad;
-        sprites.penguin.onload = onSpriteLoad;
-        sprites.pudgy_jump.onload = onSpriteLoad;
-        sprites.pudgy_walk_1.onload = onSpriteLoad;
-        sprites.pudgy_walk_2.onload = onSpriteLoad;
-        sprites.pudgy_walk_3.onload = onSpriteLoad;
-        sprites.pudgy_walk_4.onload = onSpriteLoad;
-        sprites.pudgy_walk_5.onload = onSpriteLoad;
-        sprites.pudgy_walk_6.onload = onSpriteLoad;
-        sprites.ground_1.onload = onSpriteLoad;
-        sprites.ground_2.onload = onSpriteLoad;
-        sprites.ground_3.onload = onSpriteLoad;
-        sprites.ground_4.onload = onSpriteLoad;
-        sprites.ground_5.onload = onSpriteLoad;
-        sprites.mana_orb.onload = onSpriteLoad;
-        sprites.pudgy_nappy.onload = onSpriteLoad;
-        sprites.fish_orange.onload = onSpriteLoad;
-        sprites.fish_green.onload = onSpriteLoad;
-        sprites.fish_blowfish.onload = onSpriteLoad;
-
-        sprites.igloo.onerror = () => console.error('Failed to load igloo.png');
-        sprites.ship.onerror = () => console.error('Failed to load ship.png');
-        sprites.penguin.onerror = () => console.error('Failed to load penguin.png');
-        sprites.pudgy_jump.onerror = () => console.error('Failed to load pudgy_jump.png');
-        sprites.pudgy_walk_1.onerror = () => console.error('Failed to load pudgy_walk_1.png');
-        sprites.pudgy_walk_2.onerror = () => console.error('Failed to load pudgy_walk_2.png');
-        sprites.pudgy_walk_3.onerror = () => console.error('Failed to load pudgy_walk_3.png');
-        sprites.pudgy_walk_4.onerror = () => console.error('Failed to load pudgy_walk_4.png');
-        sprites.pudgy_walk_5.onerror = () => console.error('Failed to load pudgy_walk_5.png');
-        sprites.pudgy_walk_6.onerror = () => console.error('Failed to load pudgy_walk_6.png');
-        sprites.ground_1.onerror = () => console.error('Failed to load ground_1.png');
-        sprites.ground_2.onerror = () => console.error('Failed to load ground_2.png');
-        sprites.ground_3.onerror = () => console.error('Failed to load ground_3.png');
-        sprites.ground_4.onerror = () => console.error('Failed to load ground_4.png');
-        sprites.ground_5.onerror = () => console.error('Failed to load ground_5.png');
-        sprites.mana_orb.onerror = () => console.error('Failed to load mana_orb.png');
-        sprites.pudgy_nappy.onerror = () => console.error('Failed to load pudgy_nappy.png');
-        sprites.fish_orange.onerror = () => console.error('Failed to load fish_orange.png');
-        sprites.fish_green.onerror = () => console.error('Failed to load fish_green.png');
-        sprites.fish_blowfish.onerror = () => console.error('Failed to load fish_blowfish.png');
 
         function startShipSeaRocking() {
             const maxRotation = 4 * Math.PI / 180;
@@ -643,82 +587,44 @@
             updateBob();
         }
 
-        function pulseManaOrb() {
+        function createPulseAnimation(setter, maxScale, duration) {
             const startTime = Date.now();
-            const duration = 400;
-            const maxScale = 1.2;
 
             function animate() {
                 const elapsed = Date.now() - startTime;
                 const progress = Math.min(elapsed / duration, 1);
+                let newScale;
 
                 if (progress < 0.5) {
                     const t = progress * 2;
-                    manaOrbScale = 1 + (maxScale - 1) * (1 - Math.pow(1 - t, 3));
+                    newScale = 1 + (maxScale - 1) * (1 - Math.pow(1 - t, 3));
                 } else {
                     const t = (progress - 0.5) * 2;
-                    manaOrbScale = maxScale - (maxScale - 1) * (1 - Math.pow(1 - t, 3));
+                    newScale = maxScale - (maxScale - 1) * (1 - Math.pow(1 - t, 3));
                 }
+
+                // Call the setter function directly to update the correct variable
+                setter(newScale);
 
                 if (progress < 1) {
                     requestAnimationFrame(animate);
                 } else {
-                    manaOrbScale = 1;
+                    setter(1); // Reset to base scale
                 }
             }
             animate();
+        }
+
+        function pulseManaOrb() {
+            createPulseAnimation((scale) => { manaOrbScale = scale; }, 1.2, 400);
         }
 
         function pulseIgloo() {
-            const startTime = Date.now();
-            const duration = 400;
-            const maxScale = 1.15;
-
-            function animate() {
-                const elapsed = Date.now() - startTime;
-                const progress = Math.min(elapsed / duration, 1);
-
-                if (progress < 0.5) {
-                    const t = progress * 2;
-                    iglooScale = 1 + (maxScale - 1) * (1 - Math.pow(1 - t, 3));
-                } else {
-                    const t = (progress - 0.5) * 2;
-                    iglooScale = maxScale - (maxScale - 1) * (1 - Math.pow(1 - t, 3));
-                }
-
-                if (progress < 1) {
-                    requestAnimationFrame(animate);
-                } else {
-                    iglooScale = 1;
-                }
-            }
-            animate();
+            createPulseAnimation((scale) => { iglooScale = scale; }, 1.15, 400);
         }
 
         function pulseExit() {
-            const startTime = Date.now();
-            const duration = 400;
-            const maxScale = 1.15;
-
-            function animate() {
-                const elapsed = Date.now() - startTime;
-                const progress = Math.min(elapsed / duration, 1);
-
-                if (progress < 0.5) {
-                    const t = progress * 2;
-                    exitScale = 1 + (maxScale - 1) * (1 - Math.pow(1 - t, 3));
-                } else {
-                    const t = (progress - 0.5) * 2;
-                    exitScale = maxScale - (maxScale - 1) * (1 - Math.pow(1 - t, 3));
-                }
-
-                if (progress < 1) {
-                    requestAnimationFrame(animate);
-                } else {
-                    exitScale = 1;
-                }
-            }
-            animate();
+            createPulseAnimation((scale) => { exitScale = scale; }, 1.15, 400);
         }
 
         class Lemming {
@@ -730,13 +636,17 @@
                 this.width = 25;
                 this.height = 38;
                 this.alive = true;
-                this.lastAction = "spawned";
-                this.justSteppedUp = false;
                 this.swimming = false;
                 this.bobPhase = Math.random() * Math.PI * 2;
                 this.animationFrame = 0;
                 this.lastAnimationTime = performance.now();
                 this.animationInterval = 125;
+            }
+
+            checkCeiling(fromY, toY) {
+                const centerX = this.x + this.width / 2;
+                const checkY = fromY + this.height * 0.55; // just under wall check
+                return isSolidIgnoringBlueRampsCached(centerX, checkY);
             }
 
             update(deltaTime = 16.67) {
@@ -745,7 +655,7 @@
                 const dt = deltaTime / 1000;
 
                 const direction = this.vx > 0 ? 1 : -1;
-                const groundCheckX = this.x + this.width / 2 + (direction * this.width / 4);
+                const groundCheckX = this.x + this.width / 2;
                 const feetY = this.y + this.height;
 
                 if (feetY >= UI_ZONE_Y) {
@@ -755,6 +665,28 @@
                     }
                 }
 
+                // Always check for ceiling collision (not just when moving upward)
+                const centerX = this.x + this.width / 2;
+                const ceilingCheckY = this.y + this.height * 0.75;
+
+                if (isSolidIgnoringBlueRampsCached(centerX, ceilingCheckY)) {
+                    // If moving upward, stop upward velocity
+                    if (this.vy < 0) {
+                        this.vy = 0;
+                    }
+
+                    // Push down gently to get out of collision
+                    for (let pushDown = 0; pushDown < 2; pushDown++) {
+                        const testY = this.y + pushDown;
+                        const testCeilingY = testY + this.height * 0.75;
+                        if (!isSolidIgnoringBlueRampsCached(centerX, testCeilingY)) {
+                            this.y = testY;
+                            break;
+                        }
+                    }
+                }
+
+                // Swimming behavior
                 if (this.swimming) {
                     this.bobPhase += 0.1 * (deltaTime / 16.67);
                     const bobOffset = Math.sin(this.bobPhase) * 5;
@@ -773,7 +705,7 @@
                         }
                     }
 
-                    this.lastAction = "swimming";
+                    // Falling behavior
                 } else if (!isSolidPixelCached(groundCheckX, feetY + 1)) {
                     this.vy += 10368 * dt;
                     this.vy = Math.min(this.vy, 1440);
@@ -808,25 +740,25 @@
                         this.y += fallDistance;
                     }
 
-                    this.lastAction = "falling";
-                    this.justSteppedUp = false;
+                    // Walking behavior
                 } else {
                     this.vy = 0;
 
-                    if (!this.justSteppedUp) {
-                        for (let checkY = feetY - 3; checkY <= feetY + 3; checkY++) {
-                            if (isSolidPixelCached(groundCheckX, checkY)) {
-                                this.y = checkY - this.height;
-                                break;
-                            }
-                        }
-                    } else {
-                        this.justSteppedUp = false;
-                    }
+                    for (let checkY = feetY - 1; checkY <= feetY + 3; checkY++) {
+                        if (isSolidPixelCached(groundCheckX, checkY)) {
+                            const newY = checkY - this.height;
 
+                            // Only snap if ceiling isn't blocked
+                            if (!this.checkCeiling(this.y, newY)) {
+                                this.y = newY;
+                            }
+                            break;
+                        }
+                    }
                     this.attemptMovement(dt);
                 }
 
+                // Making sure our penguins stay in canvas
                 if (this.x <= 0 || this.x >= canvas.width - this.width) {
                     this.vx = -this.vx;
                     if (this.x <= 0) {
@@ -834,7 +766,6 @@
                     } else {
                         this.x = canvas.width - this.width - 1;
                     }
-                    this.lastAction = "hit boundary";
                 }
 
                 // Check mana orb collision
@@ -871,6 +802,7 @@
                     collectBlowfish();
                 }
 
+                // Reaching the igloo
                 if (exit && this.distance(this.x + this.width / 2, this.y + this.height / 2, exit.x, exit.y) < 60) {
                     this.alive = false;
                     lemmingsSaved++;
@@ -894,24 +826,12 @@
                 const wallCheckX = direction > 0 ? newX + this.width : newX;
 
                 if (isSolidIgnoringBlueRampsCached(wallCheckX, bodyY)) {
-                    const stepHeight = 16;
-                    const stepUpY = feetY - stepHeight;
-
-                    if (!isSolidIgnoringBlueRampsCached(wallCheckX, stepUpY) && !isSolidIgnoringBlueRampsCached(wallCheckX, stepUpY - this.height)) {
-                        this.x = newX;
-                        this.y -= stepHeight;
-                        this.justSteppedUp = true;
-                        this.lastAction = "stepped up 16px";
-                        return;
-                    } else {
-                        this.vx = -this.vx;
-                        this.lastAction = "hit wall - turning";
-                        return;
-                    }
+                    // Can't step up - turn around
+                    this.vx = -this.vx;
+                    return;
                 }
 
                 this.x = newX;
-                this.lastAction = "walking";
             }
 
             distance(x1, y1, x2, y2) {
@@ -1081,8 +1001,9 @@
                 const drawWidth = this.width;
                 const drawHeight = this.height;
 
+                // Always treat this.x, this.y as the center
                 if (!this.movingRight) {
-                    ctx.translate(this.x + drawWidth / 2, this.y);
+                    ctx.translate(this.x, this.y);
                     ctx.scale(-1, 1);
                     ctx.drawImage(this.sprite, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
                 } else {
@@ -1162,13 +1083,12 @@
 
                 ctx.save();
 
-                ctx.globalAlpha = blowfishAlpha;
+                const drawWidth = this.width;
+                const drawHeight = this.height;
 
-                const drawWidth = this.width * blowfishScale;
-                const drawHeight = this.height * blowfishScale;
-
+                // Always treat this.x, this.y as the center
                 if (!this.movingRight) {
-                    ctx.translate(this.x + drawWidth / 2, this.y);
+                    ctx.translate(this.x, this.y);
                     ctx.scale(-1, 1);
                     ctx.drawImage(this.sprite, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
                 } else {
@@ -1350,9 +1270,16 @@
 
             if (surfacePoints.length > 0) {
                 const spawnSurface = surfacePoints[Math.floor(Math.random() * surfacePoints.length)];
+
+                // Find the actual top surface starting from the scan point
+                let surfaceY = spawnSurface.y;
+                while (surfaceY > 0 && isTerrainAt(spawnSurface.x, surfaceY - 1)) {
+                    surfaceY--;
+                }
+
                 nappyPenguin = {
                     x: spawnSurface.x,
-                    y: spawnSurface.y - 45,
+                    y: surfaceY - 32,  // Now confidently above the true surface
                     active: true,
                     breathPhase: 0,
                     zPhase: 0
@@ -1514,25 +1441,7 @@
                 startTime: Date.now()
             });
 
-            const startTime = Date.now();
-            const duration = 600;
-
-            function animate() {
-                const elapsed = Date.now() - startTime;
-                const progress = Math.min(elapsed / duration, 1);
-
-                blowfishScale = 1 + progress * 0.5;
-                blowfishAlpha = 1 - progress;
-
-                if (progress < 1) {
-                    requestAnimationFrame(animate);
-                } else {
-                    blowfish.active = false;
-                    blowfishScale = 1;
-                    blowfishAlpha = 1;
-                }
-            }
-            animate();
+            blowfish.active = false;
 
             manaAnimation.active = true;
             manaAnimation.startTime = Date.now();
@@ -1621,56 +1530,30 @@
             }
         }
 
-        function updateManaTextAnimations() {
+        function updateTextAnimations(animationArray, yIncrement) {
             const now = Date.now();
+            const duration = 1500;
 
-            manaTextAnimations.forEach(anim => {
+            animationArray.forEach(anim => {
                 const elapsed = now - anim.startTime;
-                const duration = 1500;
                 const progress = elapsed / duration;
 
                 anim.life = 1 - progress;
-                anim.y -= 0.5;
+                anim.y += yIncrement;
             });
 
-            manaTextAnimations = manaTextAnimations.filter(anim => anim.life > 0);
+            // Return a new array containing only the active animations
+            return animationArray.filter(anim => anim.life > 0);
         }
 
-        function updatePenguinCountTextAnimations() {
-            const now = Date.now();
-
-            penguinCountTextAnimations.forEach(anim => {
-                const elapsed = now - anim.startTime;
-                const duration = 1500;
-                const progress = elapsed / duration;
-
-                anim.life = 1 - progress;
-                anim.y += 0.5;
-            });
-
-            penguinCountTextAnimations = penguinCountTextAnimations.filter(anim => anim.life > 0);
-        }
-
-        function drawManaTextAnimations() {
-            manaTextAnimations.forEach(anim => {
+        function drawTextAnimations(animationArray, font, textAlign, textBaseline, color) {
+            animationArray.forEach(anim => {
                 ctx.save();
                 ctx.globalAlpha = anim.life;
-                ctx.font = '48px Luckiest Guy, Arial';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                drawStrokedText(anim.text, anim.x, anim.y, '#00BFFF');
-                ctx.restore();
-            });
-        }
-
-        function drawPenguinCountTextAnimations() {
-            penguinCountTextAnimations.forEach(anim => {
-                ctx.save();
-                ctx.globalAlpha = anim.life;
-                ctx.font = '36px Luckiest Guy, Arial';
-                ctx.textAlign = 'left';
-                ctx.textBaseline = 'alphabetic';
-                drawStrokedText(anim.text, anim.x, anim.y, '#FFD700');
+                ctx.font = font;
+                ctx.textAlign = textAlign;
+                ctx.textBaseline = textBaseline;
+                drawStrokedText(anim.text, anim.x, anim.y, color);
                 ctx.restore();
             });
         }
@@ -2610,8 +2493,6 @@
             blowfish = null;
             blowfishHasSpawned = false;
             blowfishSpawnTime = Math.random() * 60000;
-            blowfishScale = 1;
-            blowfishAlpha = 1;
 
             generateTerrain();
             gameStartTime = Date.now();
@@ -3121,8 +3002,8 @@
             drawParticles();
 
             drawUI();
-            drawManaTextAnimations();
-            drawPenguinCountTextAnimations();
+            drawTextAnimations(manaTextAnimations, '48px Luckiest Guy, Arial', 'center', 'middle', '#00BFFF');
+            drawTextAnimations(penguinCountTextAnimations, '36px Luckiest Guy, Arial', 'left', 'alphabetic', '#FFD700');
             drawSpeedButton();
             drawSpellButtons();
         }
@@ -3169,8 +3050,6 @@
             blowfish = null;
             blowfishHasSpawned = false;
             blowfishSpawnTime = Math.random() * 60000;
-            blowfishScale = 1;
-            blowfishAlpha = 1;
 
             generateTerrain();
 
@@ -3307,8 +3186,8 @@
                 updateSea(cappedDeltaTime);
                 updateManaOrb(cappedDeltaTime);
                 updateNappyPenguin(cappedDeltaTime);
-                updateManaTextAnimations();
-                updatePenguinCountTextAnimations();
+                manaTextAnimations = updateTextAnimations(manaTextAnimations, -0.5);
+                penguinCountTextAnimations = updateTextAnimations(penguinCountTextAnimations, 0.5);
             }
 
             fishes.forEach(fish => fish.update(cappedDeltaTime, gameSpeed));

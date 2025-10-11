@@ -665,27 +665,6 @@
                     }
                 }
 
-                // Always check for ceiling collision (not just when moving upward)
-                const centerX = this.x + this.width / 2;
-                const ceilingCheckY = this.y + this.height * 0.75;
-
-                if (isSolidIgnoringBlueRampsCached(centerX, ceilingCheckY)) {
-                    // If moving upward, stop upward velocity
-                    if (this.vy < 0) {
-                        this.vy = 0;
-                    }
-
-                    // Push down gently to get out of collision
-                    for (let pushDown = 0; pushDown < 2; pushDown++) {
-                        const testY = this.y + pushDown;
-                        const testCeilingY = testY + this.height * 0.75;
-                        if (!isSolidIgnoringBlueRampsCached(centerX, testCeilingY)) {
-                            this.y = testY;
-                            break;
-                        }
-                    }
-                }
-
                 // Swimming behavior
                 if (this.swimming) {
                     this.bobPhase += 0.1 * (deltaTime / 16.67);
