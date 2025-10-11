@@ -730,6 +730,15 @@
                             // Only snap if ceiling isn't blocked
                             if (!this.checkCeiling(this.y, newY)) {
                                 this.y = newY;
+                            } else {
+                                // Ceiling is blocking - check if stuck on blue ramp
+                                const centerX = this.x + this.width / 2;
+                                if (isBlueRampCached(centerX, checkY)) {
+                                    // Push penguin down to fall off the blue ramp
+                                    this.y += 16;
+                                    // Don't do attemptMovement this frame
+                                    return;
+                                }
                             }
                             break;
                         }
