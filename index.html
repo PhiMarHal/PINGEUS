@@ -155,7 +155,7 @@
         const terrainCtx = terrainCanvas.getContext('2d');
 
         // Testing constant - set to 1 for production
-        const STARTING_LEVEL = 1;
+        const STARTING_LEVEL = 15;
 
         // UI Zone - bottom 10% reserved for buttons
         const UI_ZONE_PERCENT = 0.1;
@@ -1270,9 +1270,16 @@
 
             if (surfacePoints.length > 0) {
                 const spawnSurface = surfacePoints[Math.floor(Math.random() * surfacePoints.length)];
+
+                // Find the actual top surface starting from the scan point
+                let surfaceY = spawnSurface.y;
+                while (surfaceY > 0 && isTerrainAt(spawnSurface.x, surfaceY - 1)) {
+                    surfaceY--;
+                }
+
                 nappyPenguin = {
                     x: spawnSurface.x,
-                    y: spawnSurface.y - 45,
+                    y: surfaceY - 32,  // Now confidently above the true surface
                     active: true,
                     breathPhase: 0,
                     zPhase: 0
