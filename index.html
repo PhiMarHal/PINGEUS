@@ -644,19 +644,9 @@
             }
 
             checkCeiling(fromY, toY) {
-                // Only check if moving upward
-                if (toY >= fromY) return false;
-
                 const centerX = this.x + this.width / 2;
-
-                // Check every pixel between current head and new head position
-                for (let checkHeadY = fromY; checkHeadY >= toY; checkHeadY--) {
-                    if (isSolidIgnoringBlueRampsCached(centerX, checkHeadY)) {
-                        return true; // Ceiling blocked
-                    }
-                }
-
-                return false; // Clear path upward
+                const checkY = fromY + this.height * 0.55; // just under wall check
+                return isSolidIgnoringBlueRampsCached(centerX, checkY);
             }
 
             update(deltaTime = 16.67) {
@@ -675,22 +665,24 @@
                     }
                 }
 
-                // Check for ceiling collision when moving upward
-                if (this.vy < 0) {
-                    const newHeadY = this.y + this.vy * dt;
+                // Always check for ceiling collision (not just when moving upward)
+                const centerX = this.x + this.width / 2;
+                const ceilingCheckY = this.y + this.height * 0.75;
 
-                    if (this.checkCeiling(this.y, newHeadY)) {
+                if (isSolidIgnoringBlueRampsCached(centerX, ceilingCheckY)) {
+                    // If moving upward, stop upward velocity
+                    if (this.vy < 0) {
                         this.vy = 0;
+                    }
 
-                        // Push down gently to get out of collision
-                        for (let pushDown = 0; pushDown < 2; pushDown++) {
-                            const centerX = this.x + this.width / 2;
-                            if (!isSolidIgnoringBlueRampsCached(centerX, this.y + pushDown)) {
-                                this.y = this.y + pushDown;
-                                break;
-                            }
+                    // Push down gently to get out of collision
+                    for (let pushDown = 0; pushDown < 2; pushDown++) {
+                        const testY = this.y + pushDown;
+                        const testCeilingY = testY + this.height * 0.75;
+                        if (!isSolidIgnoringBlueRampsCached(centerX, testCeilingY)) {
+                            this.y = testY;
+                            break;
                         }
-
                     }
                 }
 
