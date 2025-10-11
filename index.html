@@ -220,9 +220,9 @@
         const bottomY = canvas.height - 70;
 
         let spellButtons = [
-            { spell: 'red', x: 260, y: bottomY, radius: buttonRadius, color: '#FF4444', name: 'Bomb' },
-            { spell: 'blue', x: 260 + buttonSpacing, y: bottomY, radius: buttonRadius, color: '#0066FF', name: 'Ramp' },
-            { spell: 'purple', x: 260 + buttonSpacing * 2, y: bottomY, radius: buttonRadius, color: '#AA44FF', name: 'Wall' }
+            { spell: 'red', x: 260, y: bottomY, radius: buttonRadius, color: '#FF4444', name: 'Bomb', flashState: 0, flashStartTime: 0, showingCost: false, costStartTime: 0, shakeOffset: 0 },
+            { spell: 'blue', x: 260 + buttonSpacing, y: bottomY, radius: buttonRadius, color: '#0066FF', name: 'Ramp', flashState: 0, flashStartTime: 0, showingCost: false, costStartTime: 0, shakeOffset: 0 },
+            { spell: 'purple', x: 260 + buttonSpacing * 2, y: bottomY, radius: buttonRadius, color: '#AA44FF', name: 'Wall', flashState: 0, flashStartTime: 0, showingCost: false, costStartTime: 0, shakeOffset: 0 }
         ];
 
         let isDrawing = false;
@@ -357,6 +357,15 @@
             // Sine wave vertical movement
             entity.wavePhase += entity.waveSpeed * deltaTime;
             entity.y = calculateSineWaveY(entity.centerY, entity.waveAmplitude, entity.wavePhase);
+        }
+
+        function showSpellCost(spell, cost) {
+            const button = spellButtons.find(b => b.spell === spell);
+            if (button) {
+                button.showingCost = true;
+                button.costStartTime = Date.now();
+                button.lastCost = cost;
+            }
         }
 
         function shuffleArray(array) {
@@ -625,6 +634,14 @@
 
         function pulseExit() {
             createPulseAnimation((scale) => { exitScale = scale; }, 1.15, 400);
+        }
+
+        function flashSpellButton(spell) {
+            const button = spellButtons.find(b => b.spell === spell);
+            if (button) {
+                button.flashState = 1;
+                button.flashStartTime = Date.now();
+            }
         }
 
         class Lemming {
@@ -1793,12 +1810,36 @@
         }
 
         function drawSpellButtons() {
+            const now = Date.now();
+
             spellButtons.forEach(button => {
                 ctx.save();
 
-                ctx.globalAlpha = currentSpell === button.spell ? 0.8 : 0.5;
+                // Check if button is flashing
+                let isFlashing = false;
 
-                ctx.fillStyle = button.color;
+                if (button.flashState > 0) {
+                    const elapsed = now - button.flashStartTime;
+                    const flashDuration = 400;
+                    const totalDuration = flashDuration * 2;
+
+                    if (elapsed < totalDuration) {
+                        const cycle = Math.floor((elapsed / flashDuration) % 2);
+                        isFlashing = cycle === 0;
+                    } else {
+                        button.flashState = 0;
+                    }
+                }
+
+                // Set opacity based on selection and flash state
+                if (isFlashing) {
+                    ctx.globalAlpha = 0.3;
+                } else {
+                    ctx.globalAlpha = currentSpell === button.spell ? 0.8 : 0.5;
+                }
+
+                // Draw button circle with grey color if flashing
+                ctx.fillStyle = isFlashing ? '#808080' : button.color;
                 ctx.beginPath();
                 ctx.arc(button.x, button.y, button.radius, 0, 2 * Math.PI);
                 ctx.fill();
@@ -1806,6 +1847,54 @@
                 ctx.strokeStyle = currentSpell === button.spell ? '#FFD700' : '#fff';
                 ctx.lineWidth = currentSpell === button.spell ? 4 : 2;
                 ctx.stroke();
+
+                // Draw mana cost on button center when using spell
+                if (button.showingCost) {
+                    const elapsed = now - button.costStartTime;
+                    const costDuration = 800; // Show for 800ms
+
+                    if (elapsed < costDuration) {
+                        // Calculate shake (only for first 150ms)
+                        let shakeX = 0;
+                        let shakeY = 0;
+                        const shakeDuration = 100;
+                        if (elapsed < shakeDuration) {
+                            const shakeIntensity = 2 * (1 - elapsed / shakeDuration); // Decay over time
+                            const frequency = 20; // High frequency for rapid shake
+                            shakeX = Math.sin(elapsed / frequency) * shakeIntensity;
+                            shakeY = Math.cos(elapsed / frequency * 1.3) * shakeIntensity;
+                        }
+
+                        // Calculate fade-out alpha
+                        const fadeStartTime = 500; // Start fading at 500ms
+                        let alpha = 1;
+                        if (elapsed > fadeStartTime) {
+                            const fadeProgress = (elapsed - fadeStartTime) / (costDuration - fadeStartTime);
+                            alpha = 1 - fadeProgress;
+                        }
+
+                        ctx.globalAlpha = alpha;
+                        ctx.font = '36px Luckiest Guy, Arial';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+
+                        // Draw the number centered, then add the minus to the left
+                        const numberText = button.lastCost.toString();
+                        const numberWidth = ctx.measureText(numberText).width;
+                        const minusWidth = ctx.measureText('-').width;
+
+                        // Center the number itself, with a small vertical offset and shake
+                        const verticalOffset = 5;
+                        const numberX = button.x + shakeX;
+                        const textY = button.y + verticalOffset + shakeY;
+                        const minusX = numberX - numberWidth / 2 - minusWidth / 2;
+
+                        drawStrokedText('-', minusX, textY, '#FFFFFF', '#000000', 3);
+                        drawStrokedText(numberText, numberX, textY, '#FFFFFF', '#000000', 3);
+                    } else {
+                        button.showingCost = false;
+                    }
+                }
 
                 ctx.restore();
             });
@@ -2148,6 +2237,135 @@
             });
         }
 
+        function handlePointerDown(pos) {
+            if (gameState === 'start') {
+                if (helpPopup.visible) {
+                    if (isPointInButton(pos.x, pos.y, helpPopup.okButton)) {
+                        helpPopup.visible = false;
+                        return;
+                    }
+
+                    const popupWidth = canvas.width * 0.8;
+                    const popupHeight = canvas.height * 0.8;
+                    const popupX = (canvas.width - popupWidth) / 2;
+                    const popupY = (canvas.height - popupHeight) / 2;
+
+                    if (pos.x < popupX || pos.x > popupX + popupWidth ||
+                        pos.y < popupY || pos.y > popupY + popupHeight) {
+                        helpPopup.visible = false;
+                        return;
+                    }
+
+                    return;
+                }
+
+                if (startButton.visible && isPointInButton(pos.x, pos.y, startButton)) {
+                    startGame();
+                    startShipSeaRocking();
+                    return;
+                }
+
+                if (helpButton.visible && isPointInButton(pos.x, pos.y, helpButton)) {
+                    helpPopup.visible = true;
+                    return;
+                }
+
+                return;
+            }
+
+            if (gameState === 'intermission' && intermissionButton.visible) {
+                if (isPointInButton(pos.x, pos.y, intermissionButton)) {
+                    startNextLevel();
+                    return;
+                }
+            }
+
+            if (gameState === 'gameover' && gameOverButton.visible) {
+                if (isPointInButton(pos.x, pos.y, gameOverButton)) {
+                    restartGame();
+                    return;
+                }
+            }
+
+            if (gameState !== 'playing') return;
+
+            if (isPointInButton(pos.x, pos.y, speedButton)) {
+                speedButton.pressed = !speedButton.pressed;
+                gameSpeed = speedButton.pressed ? 8 : 1;
+                return;
+            }
+
+            for (let button of spellButtons) {
+                if (isPointInCircleButton(pos.x, pos.y, button)) {
+                    currentSpell = button.spell;
+                    return;
+                }
+            }
+
+            const minMana = currentSpell === 'red' ? 40 : currentSpell === 'purple' ? 40 : 1;
+
+            if (mana < minMana) {
+                createSpellParticles(pos.x, pos.y, currentSpell);
+                flashSpellButton(currentSpell);
+                return;
+            }
+
+            if (currentSpell === 'red') {
+                createExplosion(pos.x, pos.y);
+                return;
+            }
+
+            if (currentSpell === 'purple') {
+                placePurpleWall(pos.x, pos.y);
+                return;
+            }
+
+            isDrawing = true;
+            drawStart = pos;
+            drawCurrent = pos;
+        }
+
+        function handlePointerMove(pos) {
+            if (!isDrawing) return;
+            drawCurrent = pos;
+        }
+
+        function handleDrawingEnd() {
+            if (!isDrawing) return;
+            isDrawing = false;
+
+            if (drawStart && drawCurrent && currentSpell === 'blue') {
+                const snappedLine = getSnappedLine(drawStart, drawCurrent);
+
+                createSpellParticles(drawStart.x, drawStart.y, 'blue');
+
+                if (snappedLine) {
+                    const lineCost = getLinePixelLength(snappedLine);
+
+                    if (mana < lineCost) {
+                        flashSpellButton('blue');
+                        drawStart = null;
+                        drawCurrent = null;
+                        return;
+                    }
+
+                    showSpellCost('blue', lineCost);
+
+                    const color = 'rgba(0, 102, 255, 255)';
+                    drawnLines.push({ line: snappedLine, color: color });
+                    drawLine(snappedLine, color);
+
+                    mana -= lineCost;
+
+                    manaAnimation.active = true;
+                    manaAnimation.startTime = Date.now();
+                }
+            }
+
+            drawStart = null;
+            drawCurrent = null;
+        }
+
         function getMousePos(event) {
             const rect = canvas.getBoundingClientRect();
             const scaleX = canvas.width / rect.width;
@@ -2207,14 +2425,53 @@
             updateCollisionCacheRegion(minX, minY, maxX - minX, maxY - minY);
         }
 
+        function handleDrawingEnd() {
+            if (!isDrawing) return;
+            isDrawing = false;
+
+            if (drawStart && drawCurrent && currentSpell === 'blue') {
+                const snappedLine = getSnappedLine(drawStart, drawCurrent);
+
+                createSpellParticles(drawStart.x, drawStart.y, 'blue');
+
+                if (snappedLine) {
+                    const lineCost = getLinePixelLength(snappedLine);
+
+                    if (mana < lineCost) {
+                        flashSpellButton('blue');
+                        drawStart = null;
+                        drawCurrent = null;
+                        return;
+                    }
+
+                    showSpellCost('blue', lineCost);
+
+                    const color = 'rgba(0, 102, 255, 255)';
+                    drawnLines.push({ line: snappedLine, color: color });
+                    drawLine(snappedLine, color);
+
+                    mana -= lineCost;
+
+                    manaAnimation.active = true;
+                    manaAnimation.startTime = Date.now();
+                }
+            }
+
+            drawStart = null;
+            drawCurrent = null;
+        }
+
         function placePurpleWall(x, y) {
             const wallCost = 40;
 
             createSpellParticles(x, y, 'purple');
 
             if (mana < wallCost) {
+                flashSpellButton('purple');
                 return;
             }
+
+            showSpellCost('purple', wallCost);
 
             const wallHeight = 64;
             const halfHeight = wallHeight / 2;
@@ -2239,8 +2496,11 @@
             createSpellParticles(x, y, 'red');
 
             if (mana < explosionCost) {
+                flashSpellButton('red');
                 return;
             }
+
+            showSpellCost('red', explosionCost);
 
             const radius = 40;
             const numPoints = 12 + Math.floor(Math.random() * 8);
@@ -2511,263 +2771,33 @@
 
         canvas.addEventListener('mousedown', function (event) {
             const pos = getMousePos(event);
-
-            if (gameState === 'start') {
-                if (helpPopup.visible) {
-                    if (isPointInButton(pos.x, pos.y, helpPopup.okButton)) {
-                        helpPopup.visible = false;
-                        return;
-                    }
-
-                    const popupWidth = canvas.width * 0.8;
-                    const popupHeight = canvas.height * 0.8;
-                    const popupX = (canvas.width - popupWidth) / 2;
-                    const popupY = (canvas.height - popupHeight) / 2;
-
-                    if (pos.x < popupX || pos.x > popupX + popupWidth ||
-                        pos.y < popupY || pos.y > popupY + popupHeight) {
-                        helpPopup.visible = false;
-                        return;
-                    }
-
-                    return;
-                }
-
-                if (startButton.visible && isPointInButton(pos.x, pos.y, startButton)) {
-                    startGame();
-                    startShipSeaRocking();
-                    return;
-                }
-
-                if (helpButton.visible && isPointInButton(pos.x, pos.y, helpButton)) {
-                    helpPopup.visible = true;
-                    return;
-                }
-
-                return;
-            }
-
-            if (gameState === 'intermission' && intermissionButton.visible) {
-                if (isPointInButton(pos.x, pos.y, intermissionButton)) {
-                    startNextLevel();
-                    return;
-                }
-            }
-
-            if (gameState === 'gameover' && gameOverButton.visible) {
-                if (isPointInButton(pos.x, pos.y, gameOverButton)) {
-                    restartGame();
-                    return;
-                }
-            }
-
-            if (gameState !== 'playing') return;
-
-            if (isPointInButton(pos.x, pos.y, speedButton)) {
-                speedButton.pressed = !speedButton.pressed;
-                gameSpeed = speedButton.pressed ? 8 : 1;
-                return;
-            }
-
-            for (let button of spellButtons) {
-                if (isPointInCircleButton(pos.x, pos.y, button)) {
-                    currentSpell = button.spell;
-                    return;
-                }
-            }
-
-            const minMana = currentSpell === 'red' ? 40 : currentSpell === 'purple' ? 40 : 10;
-
-            if (mana < minMana) {
-                createSpellParticles(pos.x, pos.y, currentSpell);
-                return;
-            }
-
-            if (currentSpell === 'red') {
-                createExplosion(pos.x, pos.y);
-                return;
-            }
-
-            if (currentSpell === 'purple') {
-                placePurpleWall(pos.x, pos.y);
-                return;
-            }
-
-            isDrawing = true;
-            drawStart = pos;
-            drawCurrent = pos;
+            handlePointerDown(pos);
         });
 
         canvas.addEventListener('mousemove', function (event) {
-            if (!isDrawing) return;
-
             const pos = getMousePos(event);
-            drawCurrent = pos;
+            handlePointerMove(pos);
         });
 
         canvas.addEventListener('mouseup', function (event) {
-            if (!isDrawing) return;
-            isDrawing = false;
-
-            if (drawStart && drawCurrent && currentSpell === 'blue') {
-                const snappedLine = getSnappedLine(drawStart, drawCurrent);
-
-                createSpellParticles(drawStart.x, drawStart.y, 'blue');
-
-                if (snappedLine) {
-                    const lineCost = getLinePixelLength(snappedLine);
-
-                    if (mana < lineCost) {
-                        drawStart = null;
-                        drawCurrent = null;
-                        return;
-                    }
-
-                    const color = 'rgba(0, 102, 255, 255)';
-                    drawnLines.push({ line: snappedLine, color: color });
-                    drawLine(snappedLine, color);
-
-                    mana -= lineCost;
-
-                    manaAnimation.active = true;
-                    manaAnimation.startTime = Date.now();
-                }
-            }
-
-            drawStart = null;
-            drawCurrent = null;
+            handleDrawingEnd();
         });
 
         canvas.addEventListener('touchstart', function (event) {
             event.preventDefault();
             const pos = getTouchPos(event);
-
-            if (gameState === 'start') {
-                if (helpPopup.visible) {
-                    if (isPointInButton(pos.x, pos.y, helpPopup.okButton)) {
-                        helpPopup.visible = false;
-                        return;
-                    }
-
-                    const popupWidth = canvas.width * 0.8;
-                    const popupHeight = canvas.height * 0.8;
-                    const popupX = (canvas.width - popupWidth) / 2;
-                    const popupY = (canvas.height - popupHeight) / 2;
-
-                    if (pos.x < popupX || pos.x > popupX + popupWidth ||
-                        pos.y < popupY || pos.y > popupY + popupHeight) {
-                        helpPopup.visible = false;
-                        return;
-                    }
-
-                    return;
-                }
-
-                if (startButton.visible && isPointInButton(pos.x, pos.y, startButton)) {
-                    startGame();
-                    startShipSeaRocking();
-                    return;
-                }
-
-                if (helpButton.visible && isPointInButton(pos.x, pos.y, helpButton)) {
-                    helpPopup.visible = true;
-                    return;
-                }
-
-                return;
-            }
-
-            if (gameState === 'intermission' && intermissionButton.visible) {
-                if (isPointInButton(pos.x, pos.y, intermissionButton)) {
-                    startNextLevel();
-                    return;
-                }
-            }
-
-            if (gameState === 'gameover' && gameOverButton.visible) {
-                if (isPointInButton(pos.x, pos.y, gameOverButton)) {
-                    restartGame();
-                    return;
-                }
-            }
-
-            if (gameState !== 'playing') return;
-
-            if (isPointInButton(pos.x, pos.y, speedButton)) {
-                speedButton.pressed = !speedButton.pressed;
-                gameSpeed = speedButton.pressed ? 8 : 1;
-                return;
-            }
-
-            for (let button of spellButtons) {
-                if (isPointInCircleButton(pos.x, pos.y, button)) {
-                    currentSpell = button.spell;
-                    return;
-                }
-            }
-
-            const minMana = currentSpell === 'red' ? 40 : currentSpell === 'purple' ? 40 : 10;
-
-            if (mana < minMana) {
-                createSpellParticles(pos.x, pos.y, currentSpell);
-                return;
-            }
-
-            if (currentSpell === 'red') {
-                createExplosion(pos.x, pos.y);
-                return;
-            }
-
-            if (currentSpell === 'purple') {
-                placePurpleWall(pos.x, pos.y);
-                return;
-            }
-
-            isDrawing = true;
-            drawStart = pos;
-            drawCurrent = pos;
+            handlePointerDown(pos);
         }, { passive: false });
 
         canvas.addEventListener('touchmove', function (event) {
             event.preventDefault();
-            if (!isDrawing) return;
-
             const pos = getTouchPos(event);
-            drawCurrent = pos;
+            handlePointerMove(pos);
         }, { passive: false });
 
         canvas.addEventListener('touchend', function (event) {
             event.preventDefault();
-            if (!isDrawing) return;
-            isDrawing = false;
-
-            if (drawStart && drawCurrent && currentSpell === 'blue') {
-                const snappedLine = getSnappedLine(drawStart, drawCurrent);
-
-                createSpellParticles(drawStart.x, drawStart.y, 'blue');
-
-                if (snappedLine) {
-                    const lineCost = getLinePixelLength(snappedLine);
-
-                    if (mana < lineCost) {
-                        drawStart = null;
-                        drawCurrent = null;
-                        return;
-                    }
-
-                    const color = 'rgba(0, 102, 255, 255)';
-                    drawnLines.push({ line: snappedLine, color: color });
-                    drawLine(snappedLine, color);
-
-                    mana -= lineCost;
-
-                    manaAnimation.active = true;
-                    manaAnimation.startTime = Date.now();
-                }
-            }
-
-            drawStart = null;
-            drawCurrent = null;
+            handleDrawingEnd();
         }, { passive: false });
 
         if (window.FarcadeSDK) {
@@ -2981,6 +3011,22 @@
                     ctx.moveTo(snappedLine[0].x, snappedLine[0].y);
                     ctx.lineTo(snappedLine[1].x, snappedLine[1].y);
                     ctx.stroke();
+                    ctx.restore();
+
+                    // Draw dynamic cost above the line
+                    const lineCost = getLinePixelLength(snappedLine);
+                    const costY = drawStart.y - 64;
+
+                    ctx.save();
+                    ctx.font = '36px Luckiest Guy, Arial';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+
+                    // Draw cost with color based on affordability
+                    const canAfford = mana >= lineCost;
+                    const costColor = canAfford ? '#00FF00' : '#FF4444';
+
+                    drawStrokedText(`-${lineCost}`, drawStart.x, costY, costColor, '#000000', 3);
                     ctx.restore();
                 }
             }
