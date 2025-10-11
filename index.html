@@ -155,7 +155,7 @@
         const terrainCtx = terrainCanvas.getContext('2d');
 
         // Testing constant - set to 1 for production
-        const STARTING_LEVEL = 16;
+        const STARTING_LEVEL = 1;
 
         // UI Zone - bottom 10% reserved for buttons
         const UI_ZONE_PERCENT = 0.1;
@@ -665,7 +665,7 @@
                 const dt = deltaTime / 1000;
 
                 const direction = this.vx > 0 ? 1 : -1;
-                const groundCheckX = this.x + this.width / 2 + (direction * this.width / 4);
+                const groundCheckX = this.x + this.width / 2;
                 const feetY = this.y + this.height;
 
                 if (feetY >= UI_ZONE_Y) {
@@ -690,6 +690,7 @@
                                 break;
                             }
                         }
+
                     }
                 }
 
