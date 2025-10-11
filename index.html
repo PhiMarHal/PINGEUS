@@ -1189,9 +1189,71 @@
             drawStaticTerrain();
         }
 
+        // Generic helper: Check if position is too close to entrance/exit
+        function isTooCloseToSpawnPoints(x, y, minDistance = 120) {
+            const distToEntrance = entrance ? distance(x, y, entrance.x, entrance.y) : Infinity;
+            const distToExit = exit ? distance(x, y, exit.x, exit.y) : Infinity;
+            return distToEntrance < minDistance || distToExit < minDistance;
+        }
+
+        // Generic helper: Find valid surface spawn points
+        function findValidSurfacePoints(minDistanceFromSpawns = 120) {
+            const surfacePoints = [];
+            const scanStep = 30;
+            const bottomSafeZone = UI_ZONE_Y - 50;
+
+            for (let x = 80; x < canvas.width - 80; x += scanStep) {
+                for (let y = 100; y < bottomSafeZone; y += scanStep) {
+                    if (isTerrainAt(x, y)) {
+                        const hasSpaceAbove = !isTerrainAt(x, y - 50) && !isTerrainAt(x, y - 35);
+
+                        if (hasSpaceAbove) {
+                            const leftOk = isTerrainAt(x - scanStep, y) || isTerrainAt(x - scanStep, y + 12);
+                            const rightOk = isTerrainAt(x + scanStep, y) || isTerrainAt(x + scanStep, y + 12);
+                            const notInBottomUI = y < UI_ZONE_Y;
+
+                            if (leftOk && rightOk && notInBottomUI && !isTooCloseToSpawnPoints(x, y, minDistanceFromSpawns)) {
+                                surfacePoints.push({ x, y });
+                            }
+                        }
+                    }
+                }
+            }
+
+            return surfacePoints;
+        }
+
+        // Generic helper: Find actual surface from a terrain point
+        function findActualSurface(x, y) {
+            let surfaceY = y;
+            while (surfaceY > 0 && isTerrainAt(x, surfaceY - 1)) {
+                surfaceY--;
+            }
+            return surfaceY;
+        }
+
+        function spawnNappyPenguin() {
+            nappyPenguin = null;
+            if (currentLevel < 13) return;
+
+            const validPoints = findValidSurfacePoints(120);
+
+            if (validPoints.length > 0) {
+                const spawnPoint = validPoints[Math.floor(Math.random() * validPoints.length)];
+                const surfaceY = findActualSurface(spawnPoint.x, spawnPoint.y);
+
+                nappyPenguin = {
+                    x: spawnPoint.x,
+                    y: surfaceY - 32,
+                    active: true,
+                    breathPhase: 0,
+                    zPhase: 0
+                };
+            }
+        }
+
         function spawnManaOrb() {
             manaOrb = null;
-
             if (currentLevel < 9) return;
 
             const bottomUIZone = UI_ZONE_Y;
@@ -1200,6 +1262,9 @@
             for (let i = 0; i < attempts; i++) {
                 const x = 100 + Math.random() * (canvas.width - 200);
                 const y = 100 + Math.random() * (bottomUIZone - 200);
+
+                // Skip if too close to spawn points
+                if (isTooCloseToSpawnPoints(x, y, 120)) continue;
 
                 const checkRadius = 30;
                 let validPosition = true;
@@ -1225,53 +1290,6 @@
                     };
                     break;
                 }
-            }
-        }
-
-        function spawnNappyPenguin() {
-            nappyPenguin = null;
-
-            if (currentLevel < 13) return;
-
-            const surfacePoints = [];
-            const scanStep = 30;
-            const bottomSafeZone = UI_ZONE_Y - 50;
-            const bottomUIZone = { minY: UI_ZONE_Y };
-
-            for (let x = 80; x < canvas.width - 80; x += scanStep) {
-                for (let y = 100; y < bottomSafeZone; y += scanStep) {
-                    if (isTerrainAt(x, y)) {
-                        const hasSpaceAbove = !isTerrainAt(x, y - 50) && !isTerrainAt(x, y - 35);
-
-                        if (hasSpaceAbove) {
-                            const leftOk = isTerrainAt(x - scanStep, y) || isTerrainAt(x - scanStep, y + 12);
-                            const rightOk = isTerrainAt(x + scanStep, y) || isTerrainAt(x + scanStep, y + 12);
-                            const notInBottomUI = y < bottomUIZone.minY;
-
-                            if (leftOk && rightOk && notInBottomUI) {
-                                surfacePoints.push({ x, y });
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (surfacePoints.length > 0) {
-                const spawnSurface = surfacePoints[Math.floor(Math.random() * surfacePoints.length)];
-
-                // Find the actual top surface starting from the scan point
-                let surfaceY = spawnSurface.y;
-                while (surfaceY > 0 && isTerrainAt(spawnSurface.x, surfaceY - 1)) {
-                    surfaceY--;
-                }
-
-                nappyPenguin = {
-                    x: spawnSurface.x,
-                    y: surfaceY - 32,  // Now confidently above the true surface
-                    active: true,
-                    breathPhase: 0,
-                    zPhase: 0
-                };
             }
         }
 
