@@ -666,6 +666,9 @@
                 this.trapped = false;
                 this.trappedX = 0;
                 this.trappedY = 0;
+                this.trappedSlideVx = 0;
+                this.trappedOnSlick = null;
+                this.trappedFlipped = false;
                 this.isFlying = false;
                 this.flyVx = 0;
                 this.flyVy = 0;
@@ -690,6 +693,34 @@
 
                 // Handle trapped state
                 if (this.trapped) {
+                    // Apply sliding motion
+                    const dt = deltaTime / 1000;
+                    this.trappedX += this.trappedSlideVx * dt;
+
+                    // Update flip direction based on slide velocity
+                    if (this.trappedSlideVx > 0) {
+                        this.trappedFlipped = false; // Sliding right, face right
+                    } else if (this.trappedSlideVx < 0) {
+                        this.trappedFlipped = true; // Sliding left, face left
+                    }
+
+                    // Bounce off ice slick boundaries
+                    if (this.trappedOnSlick) {
+                        const slickLeft = this.trappedOnSlick.x + 16; // Match collision zone
+                        const slickRight = slickLeft + 64;
+                        const penguinCenter = this.trappedX + this.width / 2;
+
+                        if (penguinCenter <= slickLeft || penguinCenter >= slickRight) {
+                            this.trappedSlideVx = -this.trappedSlideVx;
+                            // Clamp position to stay within bounds
+                            if (penguinCenter <= slickLeft) {
+                                this.trappedX = slickLeft - this.width / 2;
+                            } else {
+                                this.trappedX = slickRight - this.width / 2;
+                            }
+                        }
+                    }
+
                     this.x = this.trappedX;
                     this.y = this.trappedY;
 
@@ -701,7 +732,6 @@
                     }
                     return;
                 }
-
 
                 const dt = deltaTime / 1000;
 
@@ -884,6 +914,9 @@
 
             launchFromIce(angle, speed) {
                 this.trapped = false;
+                this.trappedOnSlick = null;
+                this.trappedSlideVx = 0;
+                this.isFlying = true;
                 this.isFlying = true;
                 this.flyVx = Math.cos(angle) * speed;
                 this.flyVy = -Math.sin(angle) * speed;
@@ -1022,6 +1055,9 @@
                 if (this.trapped) {
                     ctx.translate(this.x + this.width / 2, this.y + this.height / 2);
                     ctx.rotate(-Math.PI / 2); // -90 degrees so they face up
+                    if (this.trappedFlipped) {
+                        ctx.scale(1, -1); // Flip vertically in rotated space = horizontal flip visually
+                    }
                     ctx.drawImage(currentSprite, -spriteWidth / 2, -spriteHeight / 2, spriteWidth, spriteHeight);
                 }
                 // Draw flying (spinning)
@@ -1280,7 +1316,7 @@
                 this.y = y;
                 this.width = 96;
                 this.height = 48;
-                this.active = true;
+                // Remove: this.active = true;
                 this.trappedPenguins = [];
                 this.blinking = false;
                 this.blinkCount = 0;
@@ -1291,9 +1327,11 @@
             trapPenguin(lemming) {
                 if (!this.trappedPenguins.includes(lemming)) {
                     lemming.trapped = true;
-                    // Keep penguin at current X but move them down to lay on the ice
                     lemming.trappedX = lemming.x;
-                    lemming.trappedY = lemming.y + 15; // Move down 15px to lay on the ice surface
+                    lemming.trappedY = lemming.y + 15;
+                    // Give penguin a random sliding velocity
+                    lemming.trappedSlideVx = (Math.random() - 0.5) * 30; // Random speed between -15 and 15
+                    lemming.trappedOnSlick = this; // Store reference to the ice slick
                     this.trappedPenguins.push(lemming);
 
                     // Create trapping particles
@@ -1317,7 +1355,7 @@
             }
 
             checkCollision(lemming) {
-                if (!this.active || lemming.trapped || lemming.isFlying || !lemming.alive) return false;
+                if (lemming.trapped || lemming.isFlying || !lemming.alive) return false;
 
                 const lemmingCenterX = lemming.x + lemming.width / 2;
                 const lemmingBottomY = lemming.y + lemming.height;
@@ -1392,8 +1430,6 @@
             }
 
             draw() {
-                if (!this.active) return;
-
                 ctx.save();
 
                 // Apply red tint if blinking
@@ -2854,7 +2890,7 @@
             }
 
             // Check if clicking on ice slick
-            if (iceSlick && iceSlick.active && iceSlick.isPointInside(x, y)) {
+            if (iceSlick && iceSlick.isPointInside(x, y)) {
                 iceSlick.startBlinking();
             }
 
@@ -3357,7 +3393,7 @@
             drawManaOrb();
             drawNappyPenguin();
 
-            if (iceSlick && iceSlick.active) {
+            if (iceSlick) {
                 iceSlick.draw();
             }
 
@@ -3604,7 +3640,7 @@
                 updateSea(cappedDeltaTime);
                 updateManaOrb(cappedDeltaTime);
                 updateNappyPenguin(cappedDeltaTime);
-                if (iceSlick && iceSlick.active) {
+                if (iceSlick) {
                     iceSlick.updateBlinking();
                 }
                 manaTextAnimations = updateTextAnimations(manaTextAnimations, -0.5);
