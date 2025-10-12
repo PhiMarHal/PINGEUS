@@ -1200,25 +1200,16 @@
 
                 ctx.save();
 
-                // Apply red tint if blinking by using globalCompositeOperation
-                if (this.blinking) {
-                    const elapsed = Date.now() - this.blinkStartTime;
-                    const isRed = Math.floor((elapsed / this.blinkDuration) % 2) === 0;
+                const drawWidth = this.width;
+                const drawHeight = this.height;
 
-                    if (isRed) {
-                        // Draw sprite normally first
-                        ctx.drawImage(sprites.ice_slick, this.x, this.y, this.width, this.height);
-
-                        // Then add red tint over it
-                        ctx.globalCompositeOperation = 'multiply';
-                        ctx.fillStyle = '#FF4444';
-                        ctx.fillRect(this.x, this.y, this.width, this.height);
-                        ctx.globalCompositeOperation = 'source-over';
-                    } else {
-                        ctx.drawImage(sprites.ice_slick, this.x, this.y, this.width, this.height);
-                    }
+                // Always treat this.x, this.y as the center
+                if (!this.movingRight) {
+                    ctx.translate(this.x, this.y);
+                    ctx.scale(-1, 1);
+                    ctx.drawImage(this.sprite, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
                 } else {
-                    ctx.drawImage(sprites.ice_slick, this.x, this.y, this.width, this.height);
+                    ctx.drawImage(this.sprite, this.x - drawWidth / 2, this.y - drawHeight / 2, drawWidth, drawHeight);
                 }
 
                 ctx.restore();
@@ -1633,7 +1624,6 @@
 
         function spawnIceSlick() {
             iceSlick = null;
-            console.log('spawnIceSlick called, currentLevel:', currentLevel);
 
             if (currentLevel < 5) {
                 console.log('Level too low for ice slick');
@@ -1641,7 +1631,6 @@
             }
 
             const validPoints = findValidSurfacePoints(120);
-            console.log('Valid points found:', validPoints.length);
 
             if (validPoints.length > 0) {
                 const spawnPoint = validPoints[Math.floor(Math.random() * validPoints.length)];
