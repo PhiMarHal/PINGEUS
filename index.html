@@ -3221,7 +3221,7 @@
 
         function spawnLemming() {
             if (entrance && lemmingsSpawned < maxLemmings) {
-                const lemming = new Lemming(entrance.x - 10, entrance.y + 10);
+                const lemming = new Lemming(entrance.x, entrance.y);
                 lemmings.push(lemming);
                 lemmingsSpawned++;
 
