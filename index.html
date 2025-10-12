@@ -196,6 +196,9 @@
         let nappyPenguinScale = 1;
         let penguinCountTextAnimations = [];
 
+        // Ice slick state
+        let iceSlick = null;
+
         const gameHints = [
             "Ending a level gives you mana. Earlier levels give more mana.",
             "Penguins laugh at gravity. No matter how high the fall.",
@@ -507,7 +510,8 @@
             pudgy_nappy: 'pudgy_nappy.png',
             fish_orange: 'fish_orange.png',
             fish_green: 'fish_green.png',
-            fish_blowfish: 'fish_blowfish.png'
+            fish_blowfish: 'fish_blowfish.png',
+            ice_slick: 'ice_slick.png'
         };
 
         let spritesLoaded = 0;
@@ -659,6 +663,14 @@
                 this.animationFrame = 0;
                 this.lastAnimationTime = performance.now();
                 this.animationInterval = 125;
+                this.trapped = false;
+                this.trappedX = 0;
+                this.trappedY = 0;
+                this.isFlying = false;
+                this.flyVx = 0;
+                this.flyVy = 0;
+                this.spinSpeed = 0;
+                this.spinAngle = 0;
             }
 
             checkCeiling(fromY, toY) {
@@ -669,6 +681,27 @@
 
             update(deltaTime = 16.67) {
                 if (!this.alive) return;
+
+                // Handle flying state
+                if (this.isFlying) {
+                    this.updateFlying(deltaTime);
+                    return;
+                }
+
+                // Handle trapped state
+                if (this.trapped) {
+                    this.x = this.trappedX;
+                    this.y = this.trappedY;
+
+                    // Continue animation while trapped
+                    const now = performance.now();
+                    if (now - this.lastAnimationTime >= this.animationInterval) {
+                        this.animationFrame++;
+                        this.lastAnimationTime = now;
+                    }
+                    return;
+                }
+
 
                 const dt = deltaTime / 1000;
 
@@ -808,6 +841,11 @@
                     collectBlowfish();
                 }
 
+                // Check ice slick collision
+                if (iceSlick && iceSlick.checkCollision(this)) {
+                    iceSlick.trapPenguin(this);
+                }
+
                 // Reaching the igloo
                 if (exit && this.distance(this.x + this.width / 2, this.y + this.height / 2, exit.x, exit.y) < 60) {
                     this.alive = false;
@@ -844,6 +882,113 @@
                 return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
             }
 
+            launchFromIce(angle, speed) {
+                this.trapped = false;
+                this.isFlying = true;
+                this.flyVx = Math.cos(angle) * speed;
+                this.flyVy = -Math.sin(angle) * speed;
+                this.spinSpeed = 720;
+                this.spinAngle = 0;
+                this.vy = 0;
+            }
+
+            updateFlying(deltaTime) {
+                const dt = deltaTime / 1000;
+
+                // Apply gravity
+                this.flyVy += 500 * dt;
+
+                // Update spin
+                this.spinAngle += this.spinSpeed * dt;
+
+                // Calculate movement
+                const dx = this.flyVx * dt;
+                const dy = this.flyVy * dt;
+                const distance = Math.hypot(dx, dy);
+
+                // Swept collision
+                const steps = Math.max(1, Math.ceil(distance / 3));
+
+                for (let step = 1; step <= steps; step++) {
+                    const t = step / steps;
+                    const newX = this.x + dx * t;
+                    const newY = this.y + dy * t;
+
+                    const centerX = newX + this.width / 2;
+                    const centerY = newY + this.height / 2;
+                    const topY = newY + 3;
+                    const bottomY = newY + this.height - 3;
+
+                    let hitSomething = false;
+                    let hitCeiling = false;
+                    let hitFloor = false;
+
+                    // Top collision
+                    if (this.flyVy < 0) {
+                        if (isSolidPixelCached(centerX, topY)) {
+                            hitCeiling = true;
+                            hitSomething = true;
+                        }
+                    }
+
+                    // Bottom collision
+                    if (this.flyVy > 0) {
+                        if (isSolidPixelCached(centerX, bottomY)) {
+                            hitFloor = true;
+                            hitSomething = true;
+                        }
+                    }
+
+                    if (hitSomething) {
+                        if (hitCeiling) {
+                            this.isFlying = false;
+                            this.flyVx = 0;
+                            this.flyVy = 0;
+                            this.vy = 0;
+                            this.spinAngle = 0;
+                            return;
+                        } else if (hitFloor) {
+                            // Land on ground
+                            let groundY = bottomY;
+                            for (let checkY = bottomY; checkY <= bottomY + 10; checkY++) {
+                                if (isSolidPixelCached(centerX, checkY)) {
+                                    groundY = checkY;
+                                    break;
+                                }
+                            }
+                            this.y = groundY - this.height;
+                            this.isFlying = false;
+                            this.flyVx = 0;
+                            this.flyVy = 0;
+                            this.vy = 0;
+                            this.spinAngle = 0;
+                            return;
+                        }
+                        return;
+                    }
+
+                    this.x = newX;
+                    this.y = newY;
+                }
+
+                // Boundary checks
+                if (this.x < 0) {
+                    this.x = 0;
+                    this.flyVx = Math.abs(this.flyVx) * 0.3;
+                }
+                if (this.x + this.width > canvas.width) {
+                    this.x = canvas.width - this.width;
+                    this.flyVx = -Math.abs(this.flyVx) * 0.3;
+                }
+                if (this.y < 0) {
+                    this.y = 0;
+                    this.flyVy = Math.abs(this.flyVy) * 0.3;
+                }
+                if (this.y + this.height > canvas.height) {
+                    this.alive = false;
+                }
+            }
+
             draw() {
                 if (!this.alive) return;
 
@@ -873,12 +1018,27 @@
                 ];
                 const currentSprite = walkSprites[currentFrame];
 
-                if (this.vx < 0) {
-                    ctx.translate(this.x + this.width + offsetX, this.y - offsetY);
-                    ctx.scale(-1, 1);
-                    ctx.drawImage(currentSprite, 0, 0, spriteWidth, spriteHeight);
-                } else {
-                    ctx.drawImage(currentSprite, this.x - offsetX, this.y - offsetY, spriteWidth, spriteHeight);
+                // Draw trapped (on back)
+                if (this.trapped) {
+                    ctx.translate(this.x + this.width / 2, this.y + this.height / 2);
+                    ctx.rotate(-Math.PI / 2); // -90 degrees so they face up
+                    ctx.drawImage(currentSprite, -spriteWidth / 2, -spriteHeight / 2, spriteWidth, spriteHeight);
+                }
+                // Draw flying (spinning)
+                else if (this.isFlying) {
+                    ctx.translate(this.x + this.width / 2, this.y + this.height / 2);
+                    ctx.rotate((this.spinAngle * Math.PI) / 180);
+                    ctx.drawImage(currentSprite, -spriteWidth / 2, -spriteHeight / 2, spriteWidth, spriteHeight);
+                }
+                // Draw normal
+                else {
+                    if (this.vx < 0) {
+                        ctx.translate(this.x + this.width + offsetX, this.y - offsetY);
+                        ctx.scale(-1, 1);
+                        ctx.drawImage(currentSprite, 0, 0, spriteWidth, spriteHeight);
+                    } else {
+                        ctx.drawImage(currentSprite, this.x - offsetX, this.y - offsetY, spriteWidth, spriteHeight);
+                    }
                 }
 
                 ctx.restore();
@@ -1004,16 +1164,25 @@
 
                 ctx.save();
 
-                const drawWidth = this.width;
-                const drawHeight = this.height;
+                // Apply red tint if blinking by using globalCompositeOperation
+                if (this.blinking) {
+                    const elapsed = Date.now() - this.blinkStartTime;
+                    const isRed = Math.floor((elapsed / this.blinkDuration) % 2) === 0;
 
-                // Always treat this.x, this.y as the center
-                if (!this.movingRight) {
-                    ctx.translate(this.x, this.y);
-                    ctx.scale(-1, 1);
-                    ctx.drawImage(this.sprite, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+                    if (isRed) {
+                        // Draw sprite normally first
+                        ctx.drawImage(sprites.ice_slick, this.x, this.y, this.width, this.height);
+
+                        // Then add red tint over it
+                        ctx.globalCompositeOperation = 'multiply';
+                        ctx.fillStyle = '#FF4444';
+                        ctx.fillRect(this.x, this.y, this.width, this.height);
+                        ctx.globalCompositeOperation = 'source-over';
+                    } else {
+                        ctx.drawImage(sprites.ice_slick, this.x, this.y, this.width, this.height);
+                    }
                 } else {
-                    ctx.drawImage(this.sprite, this.x - drawWidth / 2, this.y - drawHeight / 2, drawWidth, drawHeight);
+                    ctx.drawImage(sprites.ice_slick, this.x, this.y, this.width, this.height);
                 }
 
                 ctx.restore();
@@ -1099,6 +1268,161 @@
                     ctx.drawImage(this.sprite, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
                 } else {
                     ctx.drawImage(this.sprite, this.x - drawWidth / 2, this.y - drawHeight / 2, drawWidth, drawHeight);
+                }
+
+                ctx.restore();
+            }
+        }
+
+        class IceSlick {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.width = 96;
+                this.height = 48;
+                this.active = true;
+                this.trappedPenguins = [];
+                this.blinking = false;
+                this.blinkCount = 0;
+                this.blinkStartTime = 0;
+                this.blinkDuration = 150;
+            }
+
+            trapPenguin(lemming) {
+                if (!this.trappedPenguins.includes(lemming)) {
+                    lemming.trapped = true;
+                    // Keep penguin at current X but move them down to lay on the ice
+                    lemming.trappedX = lemming.x;
+                    lemming.trappedY = lemming.y + 15; // Move down 15px to lay on the ice surface
+                    this.trappedPenguins.push(lemming);
+
+                    // Create trapping particles
+                    const colors = ['#88DDFF', '#AAEEFF', '#CCFFFF', '#FFFFFF'];
+                    for (let i = 0; i < 8; i++) {
+                        const angle = Math.random() * Math.PI * 2;
+                        const speed = 0.5 + Math.random() * 1;
+                        const color = colors[Math.floor(Math.random() * colors.length)];
+
+                        particles.push({
+                            x: lemming.x + lemming.width / 2,
+                            y: lemming.y + lemming.height / 2,
+                            vx: Math.cos(angle) * speed,
+                            vy: Math.sin(angle) * speed - 0.5,
+                            life: 1.0,
+                            decay: 0.015 + Math.random() * 0.01,
+                            color: color
+                        });
+                    }
+                }
+            }
+
+            checkCollision(lemming) {
+                if (!this.active || lemming.trapped || lemming.isFlying || !lemming.alive) return false;
+
+                const lemmingCenterX = lemming.x + lemming.width / 2;
+                const lemmingBottomY = lemming.y + lemming.height;
+
+                // Tighter collision zone: 80px wide (centered), 20px tall (top surface only)
+                const collisionX = this.x + 8; // Center horizontally (96 - 80 = 16, divided by 2 = 8)
+                const collisionY = this.y;
+                const collisionWidth = 80;
+                const collisionHeight = 20;
+
+                return lemmingCenterX >= collisionX &&
+                    lemmingCenterX <= collisionX + collisionWidth &&
+                    lemmingBottomY >= collisionY &&
+                    lemmingBottomY <= collisionY + collisionHeight;
+            }
+
+            startBlinking() {
+                this.blinking = true;
+                this.blinkCount = 0;
+                this.blinkStartTime = Date.now();
+            }
+
+            updateBlinking() {
+                if (!this.blinking) return;
+
+                const elapsed = Date.now() - this.blinkStartTime;
+                const totalCycles = Math.floor(elapsed / this.blinkDuration);
+
+                if (totalCycles >= 4) { // 2 blinks = 4 cycles (on-off-on-off)
+                    this.blinking = false;
+                    this.launchPenguins();
+                }
+            }
+
+            launchPenguins() {
+                this.trappedPenguins.forEach(lemming => {
+                    if (lemming.alive) {
+                        const angleInDegrees = 30 + Math.random() * 120; // 30-150 degrees
+                        const angleInRadians = (angleInDegrees * Math.PI) / 180;
+                        const speed = 300 + Math.random() * 150;
+
+                        lemming.launchFromIce(angleInRadians, speed);
+
+                        // Create launch particles
+                        const colors = ['#FF4444', '#FF6666', '#FFAA88', '#FFD700'];
+                        for (let i = 0; i < 12; i++) {
+                            const angle = Math.random() * Math.PI * 2;
+                            const particleSpeed = 2 + Math.random() * 2;
+                            const color = colors[Math.floor(Math.random() * colors.length)];
+
+                            particles.push({
+                                x: lemming.x + lemming.width / 2,
+                                y: lemming.y + lemming.height / 2,
+                                vx: Math.cos(angle) * particleSpeed,
+                                vy: Math.sin(angle) * particleSpeed - 1.5,
+                                life: 1.0,
+                                decay: 0.012 + Math.random() * 0.008,
+                                color: color
+                            });
+                        }
+                    }
+                });
+
+                this.trappedPenguins = [];
+            }
+
+            isPointInside(x, y) {
+                return x >= this.x &&
+                    x <= this.x + this.width &&
+                    y >= this.y &&
+                    y <= this.y + this.height;
+            }
+
+            draw() {
+                if (!this.active) return;
+
+                ctx.save();
+
+                // Apply red tint if blinking
+                if (this.blinking) {
+                    const elapsed = Date.now() - this.blinkStartTime;
+                    const isRed = Math.floor((elapsed / this.blinkDuration) % 2) === 0;
+
+                    if (isRed) {
+                        // Create a temporary canvas for the tinted sprite
+                        const tempCanvas = document.createElement('canvas');
+                        tempCanvas.width = this.width;
+                        tempCanvas.height = this.height;
+                        const tempCtx = tempCanvas.getContext('2d');
+
+                        // Draw the sprite
+                        tempCtx.drawImage(sprites.ice_slick, 0, 0, this.width, this.height);
+
+                        // Apply red tint
+                        tempCtx.globalCompositeOperation = 'source-atop';
+                        tempCtx.fillStyle = 'rgba(255, 50, 50, 0.7)';
+                        tempCtx.fillRect(0, 0, this.width, this.height);
+
+                        // Draw the tinted sprite to main canvas
+                        ctx.drawImage(tempCanvas, this.x, this.y);
+                    } else {
+                        ctx.drawImage(sprites.ice_slick, this.x, this.y, this.width, this.height);
+                    }
+                } else {
+                    ctx.drawImage(sprites.ice_slick, this.x, this.y, this.width, this.height);
                 }
 
                 ctx.restore();
@@ -1204,6 +1528,7 @@
             findSpawnPoints();
             spawnManaOrb();
             spawnNappyPenguin();
+            spawnIceSlick();
             drawStaticTerrain();
         }
 
@@ -1267,6 +1592,33 @@
                     breathPhase: 0,
                     zPhase: 0
                 };
+            }
+        }
+
+        function spawnIceSlick() {
+            iceSlick = null;
+            console.log('spawnIceSlick called, currentLevel:', currentLevel);
+
+            if (currentLevel < 5) {
+                console.log('Level too low for ice slick');
+                return;
+            }
+
+            const validPoints = findValidSurfacePoints(120);
+            console.log('Valid points found:', validPoints.length);
+
+            if (validPoints.length > 0) {
+                const spawnPoint = validPoints[Math.floor(Math.random() * validPoints.length)];
+                const surfaceY = findActualSurface(spawnPoint.x, spawnPoint.y);
+
+                iceSlick = new IceSlick(
+                    spawnPoint.x - 48, // Center the 96px wide slick
+                    surfaceY - 10 // Place slightly above surface
+                );
+
+                console.log('Ice slick spawned at:', iceSlick.x, iceSlick.y);
+            } else {
+                console.log('No valid spawn points found for ice slick');
             }
         }
 
@@ -2501,6 +2853,11 @@
                 return;
             }
 
+            // Check if clicking on ice slick
+            if (iceSlick && iceSlick.active && iceSlick.isPointInside(x, y)) {
+                iceSlick.startBlinking();
+            }
+
             showSpellCost('red', explosionCost);
 
             const radius = 40;
@@ -2760,6 +3117,8 @@
             blowfish = null;
             blowfishHasSpawned = false;
             blowfishSpawnTime = Math.random() * 60000;
+            iceSlick = null;
+
 
             generateTerrain();
             gameStartTime = Date.now();
@@ -2998,6 +3357,10 @@
             drawManaOrb();
             drawNappyPenguin();
 
+            if (iceSlick && iceSlick.active) {
+                iceSlick.draw();
+            }
+
             if (isDrawing && drawStart && drawCurrent && currentSpell === 'blue') {
                 const snappedLine = getSnappedLine(drawStart, drawCurrent);
 
@@ -3103,6 +3466,8 @@
             blowfish = null;
             blowfishHasSpawned = false;
             blowfishSpawnTime = Math.random() * 60000;
+            iceSlick = null;
+
 
             generateTerrain();
 
@@ -3239,6 +3604,9 @@
                 updateSea(cappedDeltaTime);
                 updateManaOrb(cappedDeltaTime);
                 updateNappyPenguin(cappedDeltaTime);
+                if (iceSlick && iceSlick.active) {
+                    iceSlick.updateBlinking();
+                }
                 manaTextAnimations = updateTextAnimations(manaTextAnimations, -0.5);
                 penguinCountTextAnimations = updateTextAnimations(penguinCountTextAnimations, 0.5);
             }
