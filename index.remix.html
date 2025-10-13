@@ -16,9 +16,6 @@
             background-color: #2c3e50;
             color: white;
             overflow: hidden;
-            display: flex;
-            justify-content: center;
-            align-items: center;
             width: 100vw;
             height: 100vh;
             box-sizing: border-box;
@@ -30,14 +27,20 @@
 
         #terrainCanvas {
             background-color: #87CEEB;
-            max-width: 100%;
-            max-height: 100%;
-            width: auto;
-            height: auto;
             display: block;
             touch-action: none;
             position: absolute;
             z-index: 100;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            /* Use exact fractions, not decimal approximations */
+            width: 100vw;
+            height: calc(100vw * 3 / 2);
+            /* 2:3 ratio - exact fraction */
+            max-height: 100vh;
+            max-width: calc(100vh * 2 / 3);
+            /* inverse ratio - exact fraction */
         }
     </style>
 </head>
@@ -1144,7 +1147,6 @@
             constructor() {
                 this.type = Math.random() < 0.5 ? 'orange' : 'green';
                 this.sprite = this.type === 'orange' ? sprites.fish_orange : sprites.fish_green;
-                console.log('Fish created, type:', this.type, 'sprite:', this.sprite);
 
                 this.movingRight = Math.random() < 0.5;
 
@@ -1201,25 +1203,16 @@
 
                 ctx.save();
 
-                // Apply red tint if blinking by using globalCompositeOperation
-                if (this.blinking) {
-                    const elapsed = Date.now() - this.blinkStartTime;
-                    const isRed = Math.floor((elapsed / this.blinkDuration) % 2) === 0;
+                const drawWidth = this.width;
+                const drawHeight = this.height;
 
-                    if (isRed) {
-                        // Draw sprite normally first
-                        ctx.drawImage(sprites.ice_slick, this.x, this.y, this.width, this.height);
-
-                        // Then add red tint over it
-                        ctx.globalCompositeOperation = 'multiply';
-                        ctx.fillStyle = '#FF4444';
-                        ctx.fillRect(this.x, this.y, this.width, this.height);
-                        ctx.globalCompositeOperation = 'source-over';
-                    } else {
-                        ctx.drawImage(sprites.ice_slick, this.x, this.y, this.width, this.height);
-                    }
+                // Always treat this.x, this.y as the center
+                if (!this.movingRight) {
+                    ctx.translate(this.x, this.y);
+                    ctx.scale(-1, 1);
+                    ctx.drawImage(this.sprite, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
                 } else {
-                    ctx.drawImage(sprites.ice_slick, this.x, this.y, this.width, this.height);
+                    ctx.drawImage(this.sprite, this.x - drawWidth / 2, this.y - drawHeight / 2, drawWidth, drawHeight);
                 }
 
                 ctx.restore();
@@ -1634,7 +1627,6 @@
 
         function spawnIceSlick() {
             iceSlick = null;
-            console.log('spawnIceSlick called, currentLevel:', currentLevel);
 
             if (currentLevel < 5) {
                 console.log('Level too low for ice slick');
@@ -1642,7 +1634,6 @@
             }
 
             const validPoints = findValidSurfacePoints(120);
-            console.log('Valid points found:', validPoints.length);
 
             if (validPoints.length > 0) {
                 const spawnPoint = validPoints[Math.floor(Math.random() * validPoints.length)];
@@ -3684,148 +3675,47 @@
             init: function () {
                 if (this.isInitialized) return;
 
-                if (document.readyState === 'loading') {
-                    document.addEventListener('DOMContentLoaded', () => this.init());
-                    return;
-                }
-
                 this.createCanvases();
+                this.drawPattern();
 
-                if (this.patternCanvas) {
-                    this.drawPattern();
-                }
-
-                setTimeout(() => {
-                    this.updateBorders();
-                }, 100);
+                // Draw border after a delay to let layout settle
+                setTimeout(() => this.drawBorder(), 100);
 
                 window.addEventListener('resize', () => this.handleResize());
-
                 this.isInitialized = true;
             },
 
             createCanvases: function () {
-                if (window.innerWidth <= 0 || window.innerHeight <= 0) {
-                    setTimeout(() => this.createCanvases(), 100);
-                    return;
-                }
+                this.patternCanvas = document.createElement('canvas');
+                this.patternCanvas.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+        `;
+                this.patternCanvas.width = window.innerWidth;
+                this.patternCanvas.height = window.innerHeight;
+                document.body.insertBefore(this.patternCanvas, document.body.firstChild);
 
-                try {
-                    this.patternCanvas = document.createElement('canvas');
-                    this.patternCanvas.style.position = 'absolute';
-                    this.patternCanvas.style.top = '0';
-                    this.patternCanvas.style.left = '0';
-                    this.patternCanvas.style.width = '100%';
-                    this.patternCanvas.style.height = '100%';
-                    this.patternCanvas.style.pointerEvents = 'none';
-                    this.patternCanvas.style.zIndex = '1';
-                    this.patternCanvas.width = window.innerWidth;
-                    this.patternCanvas.height = window.innerHeight;
-                    document.body.insertBefore(this.patternCanvas, document.body.firstChild);
-
-                    this.borderCanvas = document.createElement('canvas');
-                    this.borderCanvas.style.position = 'absolute';
-                    this.borderCanvas.style.top = '0';
-                    this.borderCanvas.style.left = '0';
-                    this.borderCanvas.style.width = '100%';
-                    this.borderCanvas.style.height = '100%';
-                    this.borderCanvas.style.pointerEvents = 'none';
-                    this.borderCanvas.style.zIndex = '2';
-                    this.borderCanvas.width = window.innerWidth;
-                    this.borderCanvas.height = window.innerHeight;
-                    document.body.insertBefore(this.borderCanvas, document.body.firstChild);
-                } catch (error) {
-                    console.error("Failed to create canvas elements:", error);
-                }
-            },
-
-            findGameCanvas: function () {
-                return document.getElementById('terrainCanvas');
-            },
-
-            getLetterboxingSides: function () {
-                const gameCanvas = this.findGameCanvas();
-                if (!gameCanvas) {
-                    return { top: false, bottom: false, left: false, right: false };
-                }
-
-                const canvasRect = gameCanvas.getBoundingClientRect();
-                const viewportWidth = window.innerWidth;
-                const viewportHeight = window.innerHeight;
-
-                return {
-                    left: canvasRect.left > 5,
-                    right: (viewportWidth - canvasRect.right) > 5,
-                    top: canvasRect.top > 5,
-                    bottom: (viewportHeight - canvasRect.bottom) > 5
-                };
-            },
-
-            updateBorders: function () {
-                const screenWidth = window.innerWidth;
-                const screenHeight = window.innerHeight;
-                const screenRatio = screenWidth / screenHeight;
-
-                let gameWidth;
-                let gameHeight;
-                let xOffset;
-                let yOffset;
-
-                if (screenRatio >= TARGET_RATIO - EPSILON) {
-                    gameHeight = screenHeight;
-                    gameWidth = gameHeight * TARGET_RATIO;
-                    xOffset = (screenWidth - gameWidth) / 2;
-                    yOffset = 0;
-                } else {
-                    gameWidth = screenWidth;
-                    gameHeight = gameWidth / TARGET_RATIO;
-                    xOffset = 0;
-                    yOffset = (screenHeight - gameHeight) / 2;
-                }
-
-                const finalTop = Math.ceil(yOffset) - 1;
-                const finalHeight = Math.ceil(gameHeight) + 2;
-
-                let finalLeft;
-                let finalWidth;
-
-                if (Math.abs(xOffset) < EPSILON) {
-                    finalLeft = 0;
-                    finalWidth = window.innerWidth + 1;
-                } else {
-                    finalLeft = Math.round(xOffset) - 1;
-                    finalWidth = Math.ceil(gameWidth) + 2;
-                }
-
-                const rect = {
-                    left: finalLeft,
-                    top: finalTop,
-                    width: finalWidth,
-                    height: finalHeight,
-                    right: Math.ceil(xOffset + gameWidth),
-                    bottom: Math.ceil(yOffset + gameHeight),
-                };
-
-                const gameCanvas = document.getElementById('terrainCanvas');
-                if (gameCanvas) {
-                    gameCanvas.style.width = rect.width + 'px';
-                    gameCanvas.style.height = rect.height + 'px';
-                    gameCanvas.style.left = rect.left + 'px';
-                    gameCanvas.style.top = rect.top + 'px';
-                }
-
-                this.clearBorder();
-
-                if (screenRatio > TARGET_RATIO + EPSILON) {
-                    this.drawGameBorder({ left: true, right: true, top: false, bottom: false });
-                } else if (screenRatio < TARGET_RATIO - EPSILON) {
-                    this.drawGameBorder({ top: true, bottom: true, left: false, right: false });
-                }
+                this.borderCanvas = document.createElement('canvas');
+                this.borderCanvas.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 101;
+        `;
+                this.borderCanvas.width = window.innerWidth;
+                this.borderCanvas.height = window.innerHeight;
+                document.body.appendChild(this.borderCanvas);
             },
 
             drawPattern: function () {
-                if (!this.patternCanvas) return;
-
                 const ctx = this.patternCanvas.getContext('2d');
                 if (!ctx) return;
 
@@ -3864,8 +3754,8 @@
                 ctx.globalAlpha = 1.0;
             },
 
-            drawGameBorder: function (sides) {
-                const gameCanvas = this.findGameCanvas();
+            drawBorder: function () {
+                const gameCanvas = document.getElementById('terrainCanvas');
                 if (!gameCanvas || !this.borderCanvas) return;
 
                 const ctx = this.borderCanvas.getContext('2d');
@@ -3876,45 +3766,37 @@
                 const rect = gameCanvas.getBoundingClientRect();
                 const bw = this.config.borderWidth;
 
+                // Only draw borders if there's letterboxing (>5px gap)
+                const threshold = 5;
+
                 ctx.fillStyle = this.config.color;
 
-                if (sides.top) {
+                if (rect.left > threshold) {
+                    ctx.fillRect(rect.left - bw, rect.top - bw, bw, rect.height + bw * 2);
+                }
+                if ((window.innerWidth - rect.right) > threshold) {
+                    ctx.fillRect(rect.right, rect.top - bw, bw, rect.height + bw * 2);
+                }
+                if (rect.top > threshold) {
                     ctx.fillRect(rect.left - bw, rect.top - bw, rect.width + bw * 2, bw);
                 }
-                if (sides.bottom) {
+                if ((window.innerHeight - rect.bottom) > threshold) {
                     ctx.fillRect(rect.left - bw, rect.bottom, rect.width + bw * 2, bw);
-                }
-                if (sides.left) {
-                    ctx.fillRect(rect.left - bw, rect.top, bw, rect.height);
-                }
-                if (sides.right) {
-                    ctx.fillRect(rect.right, rect.top, bw, rect.height);
-                }
-            },
-
-            clearBorder: function () {
-                if (!this.borderCanvas) return;
-                const ctx = this.borderCanvas.getContext('2d');
-                if (ctx) {
-                    ctx.clearRect(0, 0, this.borderCanvas.width, this.borderCanvas.height);
                 }
             },
 
             handleResize: function () {
-                if (!this.patternCanvas || !this.borderCanvas) return;
-
                 this.patternCanvas.width = window.innerWidth;
                 this.patternCanvas.height = window.innerHeight;
                 this.borderCanvas.width = window.innerWidth;
                 this.borderCanvas.height = window.innerHeight;
 
                 this.drawPattern();
-
-                setTimeout(() => {
-                    this.updateBorders();
-                }, 100);
+                setTimeout(() => this.drawBorder(), 100);
             }
         };
+
+
     </script>
 </body>
 
