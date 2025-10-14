@@ -2936,9 +2936,30 @@
             };
         }
 
+        // Update your drawnLines to include animation state
+        // In your drawLine function, change it to store animation data:
         function drawLine(line, color) {
             if (!line || line.length < 2) return;
 
+            const lineObj = {
+                line: line,
+                color: color,
+                createdAt: Date.now(),
+                particles: []
+            };
+
+            // Initialize particles
+            const totalParticles = 16;
+            for (let i = 0; i < totalParticles; i++) {
+                lineObj.particles.push({
+                    offset: i * 0.0625,
+                    wavePhase: (i % 2 === 0) ? 0 : Math.PI
+                });
+            }
+
+            drawnLines.push(lineObj);
+
+            // Draw to collision canvas
             collisionCtx.strokeStyle = color;
             collisionCtx.lineWidth = 12;
             collisionCtx.lineCap = 'round';
@@ -2950,27 +2971,94 @@
             }
             collisionCtx.stroke();
 
-            terrainCtx.strokeStyle = color;
-            terrainCtx.lineWidth = 12;
-            terrainCtx.lineCap = 'round';
-            terrainCtx.lineJoin = 'round';
-            terrainCtx.beginPath();
-            terrainCtx.moveTo(line[0].x, line[0].y);
-            for (let i = 1; i < line.length; i++) {
-                terrainCtx.lineTo(line[i].x, line[i].y);
-            }
-            terrainCtx.stroke();
-
-            const lineLength = Math.sqrt(
-                Math.pow(line[line.length - 1].x - line[0].x, 2) +
-                Math.pow(line[line.length - 1].y - line[0].y, 2)
-            );
+            // Update collision cache
             const minX = Math.min(line[0].x, line[line.length - 1].x) - 10;
             const minY = Math.min(line[0].y, line[line.length - 1].y) - 10;
             const maxX = Math.max(line[0].x, line[line.length - 1].x) + 10;
             const maxY = Math.max(line[0].y, line[line.length - 1].y) + 10;
             updateCollisionCacheRegion(minX, minY, maxX - minX, maxY - minY);
         }
+
+        // Add this new function to draw animated blue ramps
+        function drawAnimatedBlueRamps(currentTime) {
+            drawnLines.forEach(lineObj => {
+                if (lineObj.color !== 'rgba(0, 102, 255, 255)') return; // Only blue ramps
+
+                const line = lineObj.line;
+                if (!line || line.length < 2) return;
+
+                const startX = line[0].x;
+                const startY = line[0].y;
+                const endX = line[1].x;
+                const endY = line[1].y;
+
+                // Calculate perpendicular vector
+                const dx = endX - startX;
+                const dy = endY - startY;
+                const length = Math.sqrt(dx * dx + dy * dy);
+                const perpX = -dy / length;
+                const perpY = dx / length;
+
+                // Pulsing outer aura - 0.4 to 0.8
+                const time = Date.now() / 1000;
+                const auraPhase = Math.sin(time) * 0.5 + 0.5; // 0 to 1 (the working formula!)
+
+                for (let i = 3; i >= 1; i--) {
+                    // Transform 0-1 to 0.4-0.8: multiply by 0.4, then add 0.4
+                    ctx.strokeStyle = `rgba(100, 150, 255, ${auraPhase * 0.4 + 0.4})`;
+                    ctx.lineWidth = 12 + i * 2;
+                    ctx.lineCap = 'round';
+                    ctx.beginPath();
+                    ctx.moveTo(startX, startY);
+                    ctx.lineTo(endX, endY);
+                    ctx.stroke();
+                }
+
+                // Main line
+                ctx.strokeStyle = '#0066FF';
+                ctx.lineWidth = 12;
+                ctx.beginPath();
+                ctx.moveTo(startX, startY);
+                ctx.lineTo(endX, endY);
+                ctx.stroke();
+
+
+                // Initialize particles if they don't exist
+                if (!lineObj.particles) {
+                    lineObj.particles = [];
+                    const totalParticles = 16;
+                    for (let i = 0; i < totalParticles; i++) {
+                        lineObj.particles.push({
+                            offset: i * 0.0625,
+                            wavePhase: (i % 2 === 0) ? 0 : Math.PI
+                        });
+                    }
+                }
+
+                // Intertwined sine wave particles
+                lineObj.particles.forEach(particle => {
+                    const progress = ((time * 0.25 + particle.offset) % 1);
+                    const baseX = startX + (endX - startX) * progress;
+                    const baseY = startY + (endY - startY) * progress;
+
+                    const waveOffset = Math.sin(progress * Math.PI * 3 + time * 1.5 + particle.wavePhase) * 4;
+                    const x = baseX + perpX * waveOffset;
+                    const y = baseY + perpY * waveOffset;
+
+                    const size = 1.5 + Math.sin(time * 2 + particle.offset * 16) * 0.75;
+
+                    const gradient = ctx.createRadialGradient(x, y, 0, x, y, size * 2);
+                    gradient.addColorStop(0, 'rgba(200, 230, 255, 0.9)');
+                    gradient.addColorStop(1, 'rgba(100, 150, 255, 0)');
+
+                    ctx.fillStyle = gradient;
+                    ctx.beginPath();
+                    ctx.arc(x, y, size * 2, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+            });
+        }
+
 
         function handleDrawingEnd() {
             if (!isDrawing) return;
@@ -3548,6 +3636,9 @@
             }
 
             drawStaticTerrain();
+
+            drawAnimatedBlueRamps(performance.now());
+
             drawSea();
 
             fishes.forEach(fish => fish.draw());
