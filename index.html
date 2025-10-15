@@ -154,6 +154,17 @@
         terrainCanvas.height = canvas.height;
         const terrainCtx = terrainCanvas.getContext('2d');
 
+        // Create reusable canvases once
+        const blueRampTempCanvas = document.createElement('canvas');
+        blueRampTempCanvas.width = canvas.width;
+        blueRampTempCanvas.height = canvas.height;
+        const blueRampTempCtx = blueRampTempCanvas.getContext('2d');
+
+        const purpleWallTempCanvas = document.createElement('canvas');
+        purpleWallTempCanvas.width = canvas.width;
+        purpleWallTempCanvas.height = canvas.height;
+        const purpleWallTempCtx = purpleWallTempCanvas.getContext('2d');
+
         // Testing constant - set to 1 for production
         const STARTING_LEVEL = 5;
 
@@ -3078,17 +3089,17 @@
         }
 
         function drawAnimatedBlueRamps(currentTime) {
+            // Clear the reusable temp canvas
+            blueRampTempCtx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const time = Date.now() / 1000;
+
+            // Draw ALL blue lines to the temp canvas
             drawnLines.forEach(lineObj => {
                 if (lineObj.color !== 'rgba(0, 102, 255, 255)') return;
 
                 const line = lineObj.line;
                 if (!line || line.length < 2) return;
-
-                // Create a temporary canvas for this line's animation
-                const tempCanvas = document.createElement('canvas');
-                tempCanvas.width = canvas.width;
-                tempCanvas.height = canvas.height;
-                const tempCtx = tempCanvas.getContext('2d');
 
                 const startX = line[0].x;
                 const startY = line[0].y;
@@ -3101,30 +3112,26 @@
                 const perpX = -dy / length;
                 const perpY = dx / length;
 
-                const time = Date.now() / 1000;
-
-                // Draw all the animation effects to temp canvas
                 const pulseAmount = Math.sin(time) * 0.2 + 0.6;
 
                 for (let i = 3; i >= 1; i--) {
                     const layerAlpha = pulseAmount * (i / 3);
-                    tempCtx.strokeStyle = `rgba(100, 150, 255, ${layerAlpha})`;
-                    tempCtx.lineWidth = 12 + i * 2;
-                    tempCtx.lineCap = 'round';
-                    tempCtx.beginPath();
-                    tempCtx.moveTo(startX, startY);
-                    tempCtx.lineTo(endX, endY);
-                    tempCtx.stroke();
+                    blueRampTempCtx.strokeStyle = `rgba(100, 150, 255, ${layerAlpha})`;
+                    blueRampTempCtx.lineWidth = 12 + i * 2;
+                    blueRampTempCtx.lineCap = 'round';
+                    blueRampTempCtx.beginPath();
+                    blueRampTempCtx.moveTo(startX, startY);
+                    blueRampTempCtx.lineTo(endX, endY);
+                    blueRampTempCtx.stroke();
                 }
 
-                tempCtx.strokeStyle = '#0066FF';
-                tempCtx.lineWidth = 12;
-                tempCtx.beginPath();
-                tempCtx.moveTo(startX, startY);
-                tempCtx.lineTo(endX, endY);
-                tempCtx.stroke();
+                blueRampTempCtx.strokeStyle = '#0066FF';
+                blueRampTempCtx.lineWidth = 12;
+                blueRampTempCtx.beginPath();
+                blueRampTempCtx.moveTo(startX, startY);
+                blueRampTempCtx.lineTo(endX, endY);
+                blueRampTempCtx.stroke();
 
-                // Draw particles
                 if (!lineObj.particles) {
                     lineObj.particles = [];
                     const totalParticles = Math.max(2, Math.round(length / 16));
@@ -3154,67 +3161,63 @@
 
                     const size = 1.5 + Math.sin(time * 2 + particle.offset * 16) * 0.75;
 
-                    const gradient = tempCtx.createRadialGradient(x, y, 0, x, y, size * 2);
+                    const gradient = blueRampTempCtx.createRadialGradient(x, y, 0, x, y, size * 2);
                     gradient.addColorStop(0, 'rgba(200, 230, 255, 0.9)');
                     gradient.addColorStop(1, 'rgba(100, 150, 255, 0)');
 
-                    tempCtx.fillStyle = gradient;
-                    tempCtx.beginPath();
-                    tempCtx.arc(x, y, size * 2, 0, Math.PI * 2);
-                    tempCtx.fill();
+                    blueRampTempCtx.fillStyle = gradient;
+                    blueRampTempCtx.beginPath();
+                    blueRampTempCtx.arc(x, y, size * 2, 0, Math.PI * 2);
+                    blueRampTempCtx.fill();
                 });
-
-                // Now use the collision canvas as a mask - only draw where collision exists
-                tempCtx.globalCompositeOperation = 'destination-in';
-                tempCtx.drawImage(collisionCanvas, 0, 0);
-
-                // Draw the masked result to main canvas
-                ctx.drawImage(tempCanvas, 0, 0);
             });
+
+            // Apply mask ONCE for all blue lines
+            blueRampTempCtx.globalCompositeOperation = 'destination-in';
+            blueRampTempCtx.drawImage(collisionCanvas, 0, 0);
+            blueRampTempCtx.globalCompositeOperation = 'source-over';
+
+            // Draw to main canvas ONCE
+            ctx.drawImage(blueRampTempCanvas, 0, 0);
         }
 
-        // Add this function to draw animated purple walls
         function drawAnimatedPurpleWalls(currentTime) {
+            // Clear the reusable temp canvas
+            purpleWallTempCtx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const time = currentTime / 1000;
+
+            // Draw ALL purple walls to the temp canvas
             drawnLines.forEach(lineObj => {
                 if (lineObj.color !== 'rgba(170, 68, 255, 255)') return;
 
                 const line = lineObj.line;
                 if (!line || line.length < 2) return;
 
-                // Create a temporary canvas for this wall's animation
-                const tempCanvas = document.createElement('canvas');
-                tempCanvas.width = canvas.width;
-                tempCanvas.height = canvas.height;
-                const tempCtx = tempCanvas.getContext('2d');
-
                 const startX = line[0].x;
                 const startY = line[0].y;
                 const endX = line[1].x;
                 const endY = line[1].y;
 
-                // Draw pulsing glow
-                const time = currentTime / 1000;
                 const glowPulse = Math.sin(time * 1.5) * 0.2 + 0.8;
 
                 for (let i = 3; i >= 1; i--) {
-                    tempCtx.strokeStyle = `rgba(220, 150, 255, ${0.8 * (i / 3) * glowPulse})`;
-                    tempCtx.lineWidth = 12 + i * 1.5;
-                    tempCtx.lineCap = 'round';
-                    tempCtx.beginPath();
-                    tempCtx.moveTo(startX, startY);
-                    tempCtx.lineTo(endX, endY);
-                    tempCtx.stroke();
+                    purpleWallTempCtx.strokeStyle = `rgba(220, 150, 255, ${0.8 * (i / 3) * glowPulse})`;
+                    purpleWallTempCtx.lineWidth = 12 + i * 1.5;
+                    purpleWallTempCtx.lineCap = 'round';
+                    purpleWallTempCtx.beginPath();
+                    purpleWallTempCtx.moveTo(startX, startY);
+                    purpleWallTempCtx.lineTo(endX, endY);
+                    purpleWallTempCtx.stroke();
                 }
 
-                // Main wall
-                tempCtx.strokeStyle = '#AA44FF';
-                tempCtx.lineWidth = 12;
-                tempCtx.beginPath();
-                tempCtx.moveTo(startX, startY);
-                tempCtx.lineTo(endX, endY);
-                tempCtx.stroke();
+                purpleWallTempCtx.strokeStyle = '#AA44FF';
+                purpleWallTempCtx.lineWidth = 12;
+                purpleWallTempCtx.beginPath();
+                purpleWallTempCtx.moveTo(startX, startY);
+                purpleWallTempCtx.lineTo(endX, endY);
+                purpleWallTempCtx.stroke();
 
-                // Initialize floating particles if needed
                 if (!lineObj.floatingParticles) {
                     lineObj.floatingParticles = [];
                     const numStreams = 3;
@@ -3232,7 +3235,6 @@
                     }
                 }
 
-                // Draw floating particles
                 const wallHeight = Math.abs(endY - startY);
                 const centerX = startX;
                 const bottomY = Math.max(startY, endY);
@@ -3258,26 +3260,26 @@
 
                     if (alpha > 0) {
                         const size = 3 + p.stream * 0.5 + Math.sin(time + p.index) * 0.3;
-                        const gradient = tempCtx.createRadialGradient(x, y, 0, x, y, size);
+                        const gradient = purpleWallTempCtx.createRadialGradient(x, y, 0, x, y, size);
                         gradient.addColorStop(0, `rgba(220, 150, 255, ${alpha * 0.8})`);
                         gradient.addColorStop(1, `rgba(170, 100, 255, 0)`);
 
-                        tempCtx.fillStyle = gradient;
-                        tempCtx.beginPath();
-                        tempCtx.arc(x, y, size, 0, Math.PI * 2);
-                        tempCtx.fill();
+                        purpleWallTempCtx.fillStyle = gradient;
+                        purpleWallTempCtx.beginPath();
+                        purpleWallTempCtx.arc(x, y, size, 0, Math.PI * 2);
+                        purpleWallTempCtx.fill();
                     }
                 });
-
-                // Use collision canvas as mask
-                tempCtx.globalCompositeOperation = 'destination-in';
-                tempCtx.drawImage(collisionCanvas, 0, 0);
-
-                // Draw the masked result to main canvas
-                ctx.drawImage(tempCanvas, 0, 0);
             });
-        }
 
+            // Apply mask ONCE for all purple walls
+            purpleWallTempCtx.globalCompositeOperation = 'destination-in';
+            purpleWallTempCtx.drawImage(collisionCanvas, 0, 0);
+            purpleWallTempCtx.globalCompositeOperation = 'source-over';
+
+            // Draw to main canvas ONCE
+            ctx.drawImage(purpleWallTempCanvas, 0, 0);
+        }
         function handleDrawingEnd() {
             if (!isDrawing) return;
             isDrawing = false;
