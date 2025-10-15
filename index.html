@@ -2633,6 +2633,9 @@
 
         function updateParticles() {
             particles.forEach(p => {
+                // Skip explosion particles - they have their own lifecycle
+                if (p.type === 'explosion') return;
+
                 p.x += p.vx;
                 p.y += p.vy;
                 // Only apply gravity if particle doesn't have noGravity flag
@@ -2641,7 +2644,16 @@
                 }
                 p.life -= p.decay;
             });
-            particles = particles.filter(p => p.life > 0);
+
+            particles = particles.filter(p => {
+                // Keep explosion particles based on their duration
+                if (p.type === 'explosion') {
+                    const elapsed = Date.now() - p.startTime;
+                    return elapsed <= p.duration;
+                }
+                // Keep regular particles based on life
+                return p.life > 0;
+            });
         }
 
         function updateSea(deltaTime) {
@@ -2966,7 +2978,7 @@
 
             // Draw to collision canvas
             collisionCtx.strokeStyle = color;
-            collisionCtx.lineWidth = 12;
+            collisionCtx.lineWidth = 16;
             collisionCtx.lineCap = 'round';
             collisionCtx.lineJoin = 'round';
             collisionCtx.beginPath();
@@ -3230,6 +3242,8 @@
             manaAnimation.startTime = Date.now();
         }
 
+        // Add explosion animation data structure
+        // Modify your createExplosion function to store explosion data
         function createExplosion(x, y) {
             const explosionCost = 40;
 
@@ -3246,6 +3260,16 @@
             }
 
             showSpellCost('red', explosionCost);
+
+            particles.push({
+                x: x,
+                y: y,
+                type: 'explosion',
+                startTime: Date.now(),
+                duration: 500
+            });
+
+            console.log('Explosion created at', x, y, 'Total particles:', particles.length); // DEBUG
 
             const radius = 40;
             const numPoints = 12 + Math.floor(Math.random() * 8);
@@ -3271,6 +3295,37 @@
             manaAnimation.active = true;
             manaAnimation.startTime = Date.now();
         }
+        function drawExplosionAnimations(currentTime) {
+            particles.forEach(p => {
+                if (p.type !== 'explosion') return;
+
+                const elapsed = currentTime - p.startTime;
+                if (elapsed > p.duration) return;
+
+                const progress = elapsed / p.duration;
+
+                // Circle - smaller expansion, stays within explosion zone
+                const circleRadius = 15 + progress * 25; // Now goes from 15 to 40px (matches explosion radius)
+                const gradient = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, circleRadius);
+                gradient.addColorStop(0, `rgba(255, 120, 120, ${1 - progress})`);
+                gradient.addColorStop(1, `rgba(255, 50, 50, ${(1 - progress) * 0.6})`);
+
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, circleRadius, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Ring - stays the same
+                const ringRadius = progress * 40;
+                ctx.strokeStyle = `rgba(255, 50, 50, ${(1 - progress) * 0.85})`;
+                ctx.lineWidth = 8;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, ringRadius, 0, Math.PI * 2);
+                ctx.stroke();
+            });
+        }
+
+
 
         function applyExplosionHole(x, y, explosionPoints) {
             if (explosionPoints.length < 3) return;
@@ -3745,6 +3800,7 @@
             drawAnimatedBlueRamps(performance.now());
             drawAnimatedPurpleWalls(performance.now());
 
+
             drawSea();
 
             fishes.forEach(fish => fish.draw());
@@ -3819,6 +3875,7 @@
             ctx.restore();
 
             drawParticles();
+            drawExplosionAnimations(Date.now());
 
             drawUI();
             drawTextAnimations(manaTextAnimations, '48px Luckiest Guy, Arial', 'center', 'middle', '#00BFFF');
