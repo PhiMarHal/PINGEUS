@@ -227,9 +227,58 @@
         const bottomY = canvas.height - 70;
 
         let spellButtons = [
-            { spell: 'red', x: 260, y: bottomY, radius: buttonRadius, color: '#FF4444', name: 'Bomb', flashState: 0, flashStartTime: 0, showingCost: false, costStartTime: 0, shakeOffset: 0 },
-            { spell: 'blue', x: 260 + buttonSpacing, y: bottomY, radius: buttonRadius, color: '#0066FF', name: 'Ramp', flashState: 0, flashStartTime: 0, showingCost: false, costStartTime: 0, shakeOffset: 0 },
-            { spell: 'purple', x: 260 + buttonSpacing * 2, y: bottomY, radius: buttonRadius, color: '#AA44FF', name: 'Wall', flashState: 0, flashStartTime: 0, showingCost: false, costStartTime: 0, shakeOffset: 0 }
+            {
+                spell: 'red',
+                x: 260,
+                y: bottomY,
+                radius: buttonRadius,
+                color: '#FF4444',
+                name: 'Bomb',
+                flashState: 0,
+                flashStartTime: 0,
+                showingCost: false,
+                costStartTime: 0,
+                shakeOffset: 0,
+                // Add random seeds for light movement
+                lightSeedX: Math.random() * 100,
+                lightSeedY: Math.random() * 100,
+                lightSpeedX: 0.3 + Math.random() * 0.2,
+                lightSpeedY: 0.25 + Math.random() * 0.2
+            },
+            {
+                spell: 'blue',
+                x: 260 + buttonSpacing,
+                y: bottomY,
+                radius: buttonRadius,
+                color: '#0066FF',
+                name: 'Ramp',
+                flashState: 0,
+                flashStartTime: 0,
+                showingCost: false,
+                costStartTime: 0,
+                shakeOffset: 0,
+                lightSeedX: Math.random() * 100,
+                lightSeedY: Math.random() * 100,
+                lightSpeedX: 0.3 + Math.random() * 0.2,
+                lightSpeedY: 0.25 + Math.random() * 0.2
+            },
+            {
+                spell: 'purple',
+                x: 260 + buttonSpacing * 2,
+                y: bottomY,
+                radius: buttonRadius,
+                color: '#AA44FF',
+                name: 'Wall',
+                flashState: 0,
+                flashStartTime: 0,
+                showingCost: false,
+                costStartTime: 0,
+                shakeOffset: 0,
+                lightSeedX: Math.random() * 100,
+                lightSeedY: Math.random() * 100,
+                lightSpeedX: 0.3 + Math.random() * 0.2,
+                lightSpeedY: 0.25 + Math.random() * 0.2
+            }
         ];
 
         let isDrawing = false;
@@ -2358,6 +2407,7 @@
 
         function drawSpellButtons() {
             const now = Date.now();
+            const time = now / 1000;
 
             spellButtons.forEach(button => {
                 ctx.save();
@@ -2385,52 +2435,83 @@
                     ctx.globalAlpha = currentSpell === button.spell ? 0.8 : 0.5;
                 }
 
-                // Draw button circle with grey color if flashing
-                ctx.fillStyle = isFlashing ? '#808080' : button.color;
+                // Base gradient
+                const baseGradient = ctx.createRadialGradient(button.x, button.y, 0, button.x, button.y, button.radius);
+
+                if (button.spell === 'red') {
+                    baseGradient.addColorStop(0, '#FF6666');
+                    baseGradient.addColorStop(0.7, '#FF4444');
+                    baseGradient.addColorStop(1, '#CC2222');
+                } else if (button.spell === 'blue') {
+                    baseGradient.addColorStop(0, '#5588FF');
+                    baseGradient.addColorStop(0.7, '#0066FF');
+                    baseGradient.addColorStop(1, '#003399');
+                } else if (button.spell === 'purple') {
+                    baseGradient.addColorStop(0, '#CC77FF');
+                    baseGradient.addColorStop(0.7, '#AA44FF');
+                    baseGradient.addColorStop(1, '#8822DD');
+                }
+
+                ctx.fillStyle = isFlashing ? '#808080' : baseGradient;
                 ctx.beginPath();
                 ctx.arc(button.x, button.y, button.radius, 0, 2 * Math.PI);
                 ctx.fill();
 
-                ctx.strokeStyle = currentSpell === button.spell ? '#FFD700' : '#fff';
+                // Random light movement within button (unique per button)
+                const shineX = Math.sin((time + button.lightSeedX) * button.lightSpeedX) * 12;
+                const shineY = Math.sin((time + button.lightSeedY) * button.lightSpeedY) * 12;
+
+                const shineGradient = ctx.createRadialGradient(
+                    button.x + shineX, button.y + shineY, 0,
+                    button.x + shineX, button.y + shineY, 20
+                );
+                shineGradient.addColorStop(0, 'rgba(255, 255, 255, 0.4)');
+                shineGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+
+                ctx.fillStyle = shineGradient;
+                ctx.beginPath();
+                ctx.arc(button.x + shineX, button.y + shineY, 20, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Border
+                ctx.strokeStyle = currentSpell === button.spell ? '#FFD700' : 'rgba(255, 255, 255, 0.3)';
                 ctx.lineWidth = currentSpell === button.spell ? 4 : 2;
+                ctx.beginPath();
+                ctx.arc(button.x, button.y, button.radius, 0, 2 * Math.PI);
                 ctx.stroke();
 
-                // Draw mana cost on button center when using spell
+                // Draw mana cost if showing
                 if (button.showingCost) {
                     const elapsed = now - button.costStartTime;
-                    const costDuration = 800; // Show for 800ms
+                    const costDuration = 800;
 
                     if (elapsed < costDuration) {
-                        // Calculate shake (only for first 150ms)
                         let shakeX = 0;
                         let shakeY = 0;
                         const shakeDuration = 100;
                         if (elapsed < shakeDuration) {
-                            const shakeIntensity = 2 * (1 - elapsed / shakeDuration); // Decay over time
-                            const frequency = 20; // High frequency for rapid shake
+                            const shakeIntensity = 2 * (1 - elapsed / shakeDuration);
+                            const frequency = 20;
                             shakeX = Math.sin(elapsed / frequency) * shakeIntensity;
                             shakeY = Math.cos(elapsed / frequency * 1.3) * shakeIntensity;
                         }
 
-                        // Calculate fade-out alpha
-                        const fadeStartTime = 500; // Start fading at 500ms
+                        const fadeStartTime = 500;
                         let alpha = 1;
                         if (elapsed > fadeStartTime) {
                             const fadeProgress = (elapsed - fadeStartTime) / (costDuration - fadeStartTime);
                             alpha = 1 - fadeProgress;
                         }
 
-                        ctx.globalAlpha = alpha;
+                        ctx.globalAlpha = alpha * (currentSpell === button.spell ? 0.8 : 0.5);
                         ctx.font = '36px Luckiest Guy, Arial';
                         ctx.textAlign = 'center';
                         ctx.textBaseline = 'middle';
 
-                        // Draw the number centered, then add the minus to the left
                         const numberText = button.lastCost.toString();
                         const numberWidth = ctx.measureText(numberText).width;
                         const minusWidth = ctx.measureText('-').width;
 
-                        // Center the number itself, with a small vertical offset and shake
                         const verticalOffset = 5;
                         const numberX = button.x + shakeX;
                         const textY = button.y + verticalOffset + shakeY;
