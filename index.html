@@ -2936,10 +2936,14 @@
             };
         }
 
-        // Update your drawnLines to include animation state
-        // In your drawLine function, change it to store animation data:
+        // Replace the drawLine function
         function drawLine(line, color) {
             if (!line || line.length < 2) return;
+
+            // Calculate line length
+            const dx = line[1].x - line[0].x;
+            const dy = line[1].y - line[0].y;
+            const lineLength = Math.sqrt(dx * dx + dy * dy);
 
             const lineObj = {
                 line: line,
@@ -2948,11 +2952,12 @@
                 particles: []
             };
 
-            // Initialize particles
-            const totalParticles = 16;
+            // FIXED: Initialize particles based on line length
+            // Target density: 1 particle per 16 pixels (like 16 particles on a 256px line)
+            const totalParticles = Math.max(2, Math.round(lineLength / 16));
             for (let i = 0; i < totalParticles; i++) {
                 lineObj.particles.push({
-                    offset: i * 0.0625,
+                    offset: i / totalParticles,
                     wavePhase: (i % 2 === 0) ? 0 : Math.PI
                 });
             }
@@ -2979,10 +2984,9 @@
             updateCollisionCacheRegion(minX, minY, maxX - minX, maxY - minY);
         }
 
-        // Add this new function to draw animated blue ramps
         function drawAnimatedBlueRamps(currentTime) {
             drawnLines.forEach(lineObj => {
-                if (lineObj.color !== 'rgba(0, 102, 255, 255)') return; // Only blue ramps
+                if (lineObj.color !== 'rgba(0, 102, 255, 255)') return;
 
                 const line = lineObj.line;
                 if (!line || line.length < 2) return;
@@ -2992,20 +2996,21 @@
                 const endX = line[1].x;
                 const endY = line[1].y;
 
-                // Calculate perpendicular vector
                 const dx = endX - startX;
                 const dy = endY - startY;
                 const length = Math.sqrt(dx * dx + dy * dy);
                 const perpX = -dy / length;
                 const perpY = dx / length;
 
-                // Pulsing outer aura - 0.4 to 0.8
                 const time = Date.now() / 1000;
-                const auraPhase = Math.sin(time) * 0.5 + 0.5; // 0 to 1 (the working formula!)
+
+                // Simple pulsing aura - pulse range from 0.4 to 0.8
+                // DOES NOT WORK
+                const pulseAmount = Math.sin(time) * 0.2 + 0.6;
 
                 for (let i = 3; i >= 1; i--) {
-                    // Transform 0-1 to 0.4-0.8: multiply by 0.4, then add 0.4
-                    ctx.strokeStyle = `rgba(100, 150, 255, ${auraPhase * 0.4 + 0.4})`;
+                    const layerAlpha = pulseAmount * (i / 3);
+                    ctx.strokeStyle = `rgba(100, 150, 255, ${layerAlpha})`;
                     ctx.lineWidth = 12 + i * 2;
                     ctx.lineCap = 'round';
                     ctx.beginPath();
@@ -3022,26 +3027,33 @@
                 ctx.lineTo(endX, endY);
                 ctx.stroke();
 
-
-                // Initialize particles if they don't exist
                 if (!lineObj.particles) {
                     lineObj.particles = [];
-                    const totalParticles = 16;
+                    const totalParticles = Math.max(2, Math.round(length / 16));
                     for (let i = 0; i < totalParticles; i++) {
                         lineObj.particles.push({
-                            offset: i * 0.0625,
+                            offset: i / totalParticles,
                             wavePhase: (i % 2 === 0) ? 0 : Math.PI
                         });
                     }
                 }
 
-                // Intertwined sine wave particles
+                const pixelSpeed = 64;
+
                 lineObj.particles.forEach(particle => {
-                    const progress = ((time * 0.25 + particle.offset) % 1);
+                    // Particle moves at constant pixel speed
+                    const pixelsPerSecond = pixelSpeed;
+                    const secondsToCompleteLoop = length / pixelsPerSecond;
+                    const progress = ((time / secondsToCompleteLoop) + particle.offset) % 1;
+
                     const baseX = startX + (endX - startX) * progress;
                     const baseY = startY + (endY - startY) * progress;
 
-                    const waveOffset = Math.sin(progress * Math.PI * 3 + time * 1.5 + particle.wavePhase) * 4;
+                    // Wave based on pixel position only (no scrolling)
+                    const pixelPosition = progress * length;
+                    const wavesPerPixel = 1 / 85; // One wave every 85 pixels
+                    const waveOffset = Math.sin(pixelPosition * wavesPerPixel * 2 * Math.PI + particle.wavePhase) * 4;
+
                     const x = baseX + perpX * waveOffset;
                     const y = baseY + perpY * waveOffset;
 
@@ -3058,7 +3070,6 @@
                 });
             });
         }
-
 
         function handleDrawingEnd() {
             if (!isDrawing) return;
