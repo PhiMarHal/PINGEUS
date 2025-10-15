@@ -3084,6 +3084,12 @@
                 const line = lineObj.line;
                 if (!line || line.length < 2) return;
 
+                // Create a temporary canvas for this line's animation
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = canvas.width;
+                tempCanvas.height = canvas.height;
+                const tempCtx = tempCanvas.getContext('2d');
+
                 const startX = line[0].x;
                 const startY = line[0].y;
                 const endX = line[1].x;
@@ -3097,29 +3103,28 @@
 
                 const time = Date.now() / 1000;
 
-                // Simple pulsing aura - pulse range from 0.4 to 0.8
-                // DOES NOT WORK
+                // Draw all the animation effects to temp canvas
                 const pulseAmount = Math.sin(time) * 0.2 + 0.6;
 
                 for (let i = 3; i >= 1; i--) {
                     const layerAlpha = pulseAmount * (i / 3);
-                    ctx.strokeStyle = `rgba(100, 150, 255, ${layerAlpha})`;
-                    ctx.lineWidth = 12 + i * 2;
-                    ctx.lineCap = 'round';
-                    ctx.beginPath();
-                    ctx.moveTo(startX, startY);
-                    ctx.lineTo(endX, endY);
-                    ctx.stroke();
+                    tempCtx.strokeStyle = `rgba(100, 150, 255, ${layerAlpha})`;
+                    tempCtx.lineWidth = 12 + i * 2;
+                    tempCtx.lineCap = 'round';
+                    tempCtx.beginPath();
+                    tempCtx.moveTo(startX, startY);
+                    tempCtx.lineTo(endX, endY);
+                    tempCtx.stroke();
                 }
 
-                // Main line
-                ctx.strokeStyle = '#0066FF';
-                ctx.lineWidth = 12;
-                ctx.beginPath();
-                ctx.moveTo(startX, startY);
-                ctx.lineTo(endX, endY);
-                ctx.stroke();
+                tempCtx.strokeStyle = '#0066FF';
+                tempCtx.lineWidth = 12;
+                tempCtx.beginPath();
+                tempCtx.moveTo(startX, startY);
+                tempCtx.lineTo(endX, endY);
+                tempCtx.stroke();
 
+                // Draw particles
                 if (!lineObj.particles) {
                     lineObj.particles = [];
                     const totalParticles = Math.max(2, Math.round(length / 16));
@@ -3132,9 +3137,7 @@
                 }
 
                 const pixelSpeed = 64;
-
                 lineObj.particles.forEach(particle => {
-                    // Particle moves at constant pixel speed
                     const pixelsPerSecond = pixelSpeed;
                     const secondsToCompleteLoop = length / pixelsPerSecond;
                     const progress = ((time / secondsToCompleteLoop) + particle.offset) % 1;
@@ -3142,9 +3145,8 @@
                     const baseX = startX + (endX - startX) * progress;
                     const baseY = startY + (endY - startY) * progress;
 
-                    // Wave based on pixel position only (no scrolling)
                     const pixelPosition = progress * length;
-                    const wavesPerPixel = 1 / 85; // One wave every 85 pixels
+                    const wavesPerPixel = 1 / 85;
                     const waveOffset = Math.sin(pixelPosition * wavesPerPixel * 2 * Math.PI + particle.wavePhase) * 4;
 
                     const x = baseX + perpX * waveOffset;
@@ -3152,54 +3154,67 @@
 
                     const size = 1.5 + Math.sin(time * 2 + particle.offset * 16) * 0.75;
 
-                    const gradient = ctx.createRadialGradient(x, y, 0, x, y, size * 2);
+                    const gradient = tempCtx.createRadialGradient(x, y, 0, x, y, size * 2);
                     gradient.addColorStop(0, 'rgba(200, 230, 255, 0.9)');
                     gradient.addColorStop(1, 'rgba(100, 150, 255, 0)');
 
-                    ctx.fillStyle = gradient;
-                    ctx.beginPath();
-                    ctx.arc(x, y, size * 2, 0, Math.PI * 2);
-                    ctx.fill();
+                    tempCtx.fillStyle = gradient;
+                    tempCtx.beginPath();
+                    tempCtx.arc(x, y, size * 2, 0, Math.PI * 2);
+                    tempCtx.fill();
                 });
+
+                // Now use the collision canvas as a mask - only draw where collision exists
+                tempCtx.globalCompositeOperation = 'destination-in';
+                tempCtx.drawImage(collisionCanvas, 0, 0);
+
+                // Draw the masked result to main canvas
+                ctx.drawImage(tempCanvas, 0, 0);
             });
         }
 
         // Add this function to draw animated purple walls
         function drawAnimatedPurpleWalls(currentTime) {
             drawnLines.forEach(lineObj => {
-                if (lineObj.color !== 'rgba(170, 68, 255, 255)') return; // Only purple walls
+                if (lineObj.color !== 'rgba(170, 68, 255, 255)') return;
 
                 const line = lineObj.line;
                 if (!line || line.length < 2) return;
+
+                // Create a temporary canvas for this wall's animation
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = canvas.width;
+                tempCanvas.height = canvas.height;
+                const tempCtx = tempCanvas.getContext('2d');
 
                 const startX = line[0].x;
                 const startY = line[0].y;
                 const endX = line[1].x;
                 const endY = line[1].y;
 
-                // Lighter, distinct pulsing glow
+                // Draw pulsing glow
                 const time = currentTime / 1000;
                 const glowPulse = Math.sin(time * 1.5) * 0.2 + 0.8;
 
                 for (let i = 3; i >= 1; i--) {
-                    ctx.strokeStyle = `rgba(220, 150, 255, ${0.8 * (i / 3) * glowPulse})`;
-                    ctx.lineWidth = 12 + i * 1.5;
-                    ctx.lineCap = 'round';
-                    ctx.beginPath();
-                    ctx.moveTo(startX, startY);
-                    ctx.lineTo(endX, endY);
-                    ctx.stroke();
+                    tempCtx.strokeStyle = `rgba(220, 150, 255, ${0.8 * (i / 3) * glowPulse})`;
+                    tempCtx.lineWidth = 12 + i * 1.5;
+                    tempCtx.lineCap = 'round';
+                    tempCtx.beginPath();
+                    tempCtx.moveTo(startX, startY);
+                    tempCtx.lineTo(endX, endY);
+                    tempCtx.stroke();
                 }
 
                 // Main wall
-                ctx.strokeStyle = '#AA44FF';
-                ctx.lineWidth = 12;
-                ctx.beginPath();
-                ctx.moveTo(startX, startY);
-                ctx.lineTo(endX, endY);
-                ctx.stroke();
+                tempCtx.strokeStyle = '#AA44FF';
+                tempCtx.lineWidth = 12;
+                tempCtx.beginPath();
+                tempCtx.moveTo(startX, startY);
+                tempCtx.lineTo(endX, endY);
+                tempCtx.stroke();
 
-                // Initialize particles if needed
+                // Initialize floating particles if needed
                 if (!lineObj.floatingParticles) {
                     lineObj.floatingParticles = [];
                     const numStreams = 3;
@@ -3243,20 +3258,25 @@
 
                     if (alpha > 0) {
                         const size = 3 + p.stream * 0.5 + Math.sin(time + p.index) * 0.3;
-                        const gradient = ctx.createRadialGradient(x, y, 0, x, y, size);
+                        const gradient = tempCtx.createRadialGradient(x, y, 0, x, y, size);
                         gradient.addColorStop(0, `rgba(220, 150, 255, ${alpha * 0.8})`);
                         gradient.addColorStop(1, `rgba(170, 100, 255, 0)`);
 
-                        ctx.fillStyle = gradient;
-                        ctx.beginPath();
-                        ctx.arc(x, y, size, 0, Math.PI * 2);
-                        ctx.fill();
+                        tempCtx.fillStyle = gradient;
+                        tempCtx.beginPath();
+                        tempCtx.arc(x, y, size, 0, Math.PI * 2);
+                        tempCtx.fill();
                     }
                 });
+
+                // Use collision canvas as mask
+                tempCtx.globalCompositeOperation = 'destination-in';
+                tempCtx.drawImage(collisionCanvas, 0, 0);
+
+                // Draw the masked result to main canvas
+                ctx.drawImage(tempCanvas, 0, 0);
             });
         }
-
-
 
         function handleDrawingEnd() {
             if (!isDrawing) return;
@@ -3371,11 +3391,13 @@
 
             applyExplosionHole(x, y, explosionPoints);
 
+
             mana -= explosionCost;
 
             manaAnimation.active = true;
             manaAnimation.startTime = Date.now();
         }
+
         function drawExplosionAnimations(currentTime) {
             particles.forEach(p => {
                 if (p.type !== 'explosion') return;
