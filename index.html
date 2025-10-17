@@ -166,7 +166,7 @@
         const purpleWallTempCtx = purpleWallTempCanvas.getContext('2d');
 
         // Testing constant - set to 1 for production
-        const STARTING_LEVEL = 5;
+        const STARTING_LEVEL = 21;
 
         // UI Zone - bottom 10% reserved for buttons
         const UI_ZONE_PERCENT = 0.1;
@@ -569,6 +569,7 @@
             ground_3: 'ground_3.png',
             ground_4: 'ground_4.png',
             ground_5: 'ground_5.png',
+            ground_6: 'ground_6.png',
             mana_orb: 'mana_orb.png',
             pudgy_nappy: 'pudgy_nappy.png',
             fish_orange: 'fish_orange.png',
@@ -608,7 +609,7 @@
         }
 
         function updateTerrainVisuals() {
-            const levelCycle = Math.floor((currentLevel - 1) / 4) % 5;
+            const levelCycle = Math.floor((currentLevel - 1) / 4) % 6;  // CHANGE % 5 to % 6
 
             if (levelCycle === 0) {
                 groundPattern = terrainCtx.createPattern(sprites.ground_1, 'repeat');
@@ -626,10 +627,14 @@
                 groundPattern = terrainCtx.createPattern(sprites.ground_4, 'repeat');
                 currentOutlineColor = '#A0826D';
                 currentSkyColor = '#c8fc8c';
-            } else {
+            } else if (levelCycle === 4) {
                 groundPattern = terrainCtx.createPattern(sprites.ground_5, 'repeat');
                 currentOutlineColor = '#5A5A5A';
                 currentSkyColor = '#FF3333';
+            } else {  // ADD THIS ELSE BLOCK
+                groundPattern = terrainCtx.createPattern(sprites.ground_6, 'repeat');
+                currentOutlineColor = '#835E2C';
+                currentSkyColor = '#FFB380';
             }
         }
 
