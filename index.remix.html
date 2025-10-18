@@ -1660,7 +1660,6 @@
                 this.cooldownDuration = 4000;
                 this.particles = [];
                 this.windRect = this.calculateWindRect();
-                this.savedCollisionData = null;
                 this.justStartedBlowing = false;
             }
 
@@ -1712,68 +1711,6 @@
                 }
             }
 
-            drawWindToCollision() {
-                if (this.orientation !== 'south') return;
-
-                // Clamp rectangle to canvas bounds
-                const x = Math.max(0, Math.floor(this.windRect.x));
-                const y = Math.max(0, Math.floor(this.windRect.y));
-                const width = Math.min(canvas.width - x, Math.ceil(this.windRect.width));
-                const height = Math.min(canvas.height - y, Math.ceil(this.windRect.height));
-
-                if (width <= 0 || height <= 0) return;
-
-                // Save the original collision data before drawing
-                try {
-                    this.savedCollisionData = collisionCtx.getImageData(x, y, width, height);
-                    this.savedX = x;
-                    this.savedY = y;
-                    this.savedWidth = width;
-                    this.savedHeight = height;
-                } catch (e) {
-                    console.error('Failed to save collision data:', e);
-                    this.savedCollisionData = null;
-                }
-
-                // Draw wind rectangle
-                collisionCtx.fillStyle = '#8B4513';
-                collisionCtx.fillRect(x, y, width, height);
-
-                updateCollisionCacheRegion(x, y, width, height);
-            }
-
-            clearWindFromCollision() {
-                if (this.orientation !== 'south') return;
-
-                // Restore the original collision data
-                if (this.savedCollisionData && this.savedX !== undefined) {
-                    try {
-                        collisionCtx.putImageData(
-                            this.savedCollisionData,
-                            this.savedX,
-                            this.savedY
-                        );
-
-                        updateCollisionCacheRegion(
-                            this.savedX,
-                            this.savedY,
-                            this.savedWidth,
-                            this.savedHeight
-                        );
-
-                        console.log('Wind collision cleared'); // DEBUG
-                    } catch (e) {
-                        console.error('Failed to restore collision data:', e);
-                    }
-
-                    this.savedCollisionData = null;
-                    this.savedX = undefined;
-                    this.savedY = undefined;
-                } else {
-                    console.warn('No saved collision data to restore'); // DEBUG
-                }
-            }
-
             update(deltaTime, gameSpeed) {
                 // Accumulate time with game speed applied
                 this.accumulatedTime += deltaTime * gameSpeed;
@@ -1783,9 +1720,7 @@
                     if (this.accumulatedTime >= this.blowDuration) {
                         this.blowing = false;
                         this.accumulatedTime = 0;
-                        this.clearWindFromCollision();
                     } else {
-                        // REPLACE generateWindParticles() call with:
                         if (this.justStartedBlowing) {
                             this.populateEntireWindZone();
                             this.justStartedBlowing = false;
@@ -1797,8 +1732,7 @@
                     if (this.accumulatedTime >= this.cooldownDuration) {
                         this.blowing = true;
                         this.accumulatedTime = 0;
-                        this.justStartedBlowing = true; // ADD THIS LINE
-                        this.drawWindToCollision();
+                        this.justStartedBlowing = true;
                     }
                 }
 
@@ -1925,7 +1859,29 @@
                         break;
 
                     case 'south':
-                        // Do nothing - collision system handles blocking
+                        // Wind blowing down - acts as vertical barrier, push penguins horizontally
+                        const lemmingCenterX = lemming.x + lemming.width / 2;
+                        const windCenterXSouth = this.windRect.x + this.windRect.width / 2;
+                        if (lemmingCenterX < windCenterXSouth) {
+                            // Penguin on left side, push left
+                            const pushAmountLeft = 120 * dt;
+                            const targetXLeft = lemming.x - pushAmountLeft;
+                            const bodyY = lemming.y + lemming.height / 2;
+
+                            if (!isSolidIgnoringBlueRampsCached(targetXLeft, bodyY)) {
+                                lemming.x -= pushAmountLeft;
+                            }
+                        } else {
+                            // Penguin on right side, push right
+                            const pushAmountRight = 120 * dt;
+                            const targetXRight = lemming.x + pushAmountRight;
+                            const checkXRight = targetXRight + lemming.width;
+                            const bodyY = lemming.y + lemming.height / 2;
+
+                            if (!isSolidIgnoringBlueRampsCached(checkXRight, bodyY)) {
+                                lemming.x += pushAmountRight;
+                            }
+                        }
                         break;
 
                     case 'east':
@@ -4548,6 +4504,11 @@
                 }
             }
 
+            // This is split from the main update loop, else it would apply the force 8x, 8x as often = 64x
+            if (windTurbine) {
+                windTurbine.update(cappedDeltaTime, gameSpeed);
+            }
+
             const updatesPerFrame = gameSpeed;
             for (let i = 0; i < updatesPerFrame; i++) {
                 lemmings.forEach(lemming => lemming.update(cappedDeltaTime));
@@ -4561,8 +4522,8 @@
                 if (metalBox) {
                     metalBox.update();
                 }
+                // Apply wind force to lemmings (keeping this inside loop so it applies each physics tick)
                 if (windTurbine) {
-                    windTurbine.update(cappedDeltaTime, gameSpeed);
                     lemmings.forEach(lemming => {
                         windTurbine.applyWindForce(lemming, cappedDeltaTime);
                     });
