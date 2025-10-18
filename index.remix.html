@@ -475,7 +475,7 @@
 
             setTimeout(() => {
                 if (musicEnabled && currentAudio && !isMusicMuted) {
-                    currentAudio.volume = 0.7;
+                    currentAudio.volume = 0.5;
                     currentAudio.play().catch(err => console.log('Music play error:', err));
 
                     nextTrackPreloadTimer = setTimeout(() => {
@@ -484,7 +484,7 @@
                         nextAudio = loadTrack(nextTrackNumber);
                     }, 60000);
                 } else if (isMusicMuted && currentAudio) {
-                    currentAudio.volume = 0.7;
+                    currentAudio.volume = 0.5;
                 }
             }, 4000);
 
@@ -504,7 +504,7 @@
 
             currentAudio.addEventListener('canplaythrough', () => {
                 if (musicEnabled && !isMusicMuted) {
-                    currentAudio.volume = 0.7;
+                    currentAudio.volume = 0.5;
                     currentAudio.play().catch(err => console.log('Music play error:', err));
 
                     nextTrackPreloadTimer = setTimeout(() => {
@@ -4068,7 +4068,7 @@
                     }
                 } else {
                     if (currentAudio && currentAudio.paused && !document.hidden) {
-                        currentAudio.volume = 0.7;
+                        currentAudio.volume = 0.5;
                         currentAudio.play().catch(err => console.log('Music play error:', err));
                     }
                 }
