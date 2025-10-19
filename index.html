@@ -1058,7 +1058,7 @@
 
                     // Top collision
                     if (this.flyVy < 0) {
-                        if (isSolidPixelCached(centerX, topY)) {
+                        if (isSolidIgnoringBlueRampsCached(centerX, topY)) {
                             hitCeiling = true;
                             hitSomething = true;
                         }
