@@ -372,7 +372,7 @@
         let currentOutlineColor = '#00AA00';
         let currentSkyColor = '#87CEEB';
 
-        const TOTAL_TRACKS = 20;
+        const TOTAL_TRACKS = 25;
         let musicPlaylist = [];
         let currentTrackIndex = 0;
         let currentAudio = null;
@@ -4324,12 +4324,14 @@
                 blowfish.draw();
             }
 
-            drawManaOrb();
-            drawNappyPenguin();
+
 
             iceSlicks.forEach(slick => slick.draw());
             metalBoxes.forEach(box => box.draw());
             windTurbines.forEach(turbine => turbine.draw());
+
+            drawManaOrb();
+            drawNappyPenguin();
 
             if (isDrawing && drawStart && drawCurrent && currentSpell === 'blue') {
                 const snappedLine = getSnappedLine(drawStart, drawCurrent);
