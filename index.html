@@ -30,24 +30,124 @@
 
         #terrainCanvas {
             background-color: #87CEEB;
-            max-width: 100%;
-            max-height: 100%;
-            width: auto;
-            height: auto;
             display: block;
             touch-action: none;
-            position: absolute;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
             z-index: 100;
         }
     </style>
 </head>
 
 <body>
-    <canvas id="terrainCanvas" width="800" height="1200"></canvas>
+    <canvas id="terrainCanvas"></canvas>
 
     <script>
-        const canvas = document.getElementById('terrainCanvas');
-        const ctx = canvas.getContext('2d');
+        // ===== DISPLAY / WORLD / CAMERA SETUP =====
+        // The visible canvas fills the whole viewport at any resolution.
+        const screenCanvas = document.getElementById('terrainCanvas');
+        const screenCtx = screenCanvas.getContext('2d');
+
+        // Level (world) size. All game logic & rendering happen in this space.
+        const WORLD_W = 2400;
+        const WORLD_H = 1600;
+
+        // Offscreen buffer that the entire game world is rendered into.
+        const canvas = document.createElement('canvas');
+        canvas.width = WORLD_W;
+        canvas.height = WORLD_H;
+        // 'ctx' is a let so it can be temporarily retargeted to the screen for the
+        // screen-fixed HUD pass. WORLD_CTX always points at the world buffer.
+        let ctx = canvas.getContext('2d');
+        const WORLD_CTX = ctx;
+
+        // ---- Camera (world -> screen) ----
+        // VIEW_H world-units are visible vertically. The world is WORLD_H (1600) tall,
+        // so showing 800 means we are 2x zoomed in compared to seeing the whole height.
+        const VIEW_H = 800;
+        let camX = 0, camY = 0;        // top-left of the camera window, in world coords
+        let viewW = 600, viewH = VIEW_H; // camera window size, in world units
+        let zoom = 1;                  // screen(css) px per world px
+
+        // ---- Screen / HUD metrics ----
+        let DPR = Math.max(1, window.devicePixelRatio || 1);
+        let cssW = window.innerWidth;
+        let cssH = window.innerHeight;
+
+        // HUD is laid out in a "UI design space" that is VH tall and VW wide.
+        // VH is fixed; VW tracks the screen aspect so the HUD anchors to real edges.
+        let VH = 1200;
+        let VW = 800;
+        let uiScale = 1;               // css px per UI unit
+
+        function recomputeViewport() {
+            DPR = Math.max(1, window.devicePixelRatio || 1);
+            cssW = Math.max(1, window.innerWidth);
+            cssH = Math.max(1, window.innerHeight);
+
+            // Backing store at device resolution, CSS handles the 100vw/100vh stretch.
+            screenCanvas.width = Math.round(cssW * DPR);
+            screenCanvas.height = Math.round(cssH * DPR);
+
+            // Camera zoom: VIEW_H world units fill the screen height (2x zoom).
+            zoom = cssH / VIEW_H;
+            viewH = VIEW_H;
+            viewW = cssW / zoom;
+
+            // HUD design space.
+            VH = 1200;
+            uiScale = cssH / VH;
+            VW = cssW / uiScale;
+
+            if (typeof layoutHud === 'function' && typeof spellButtons !== 'undefined') {
+                layoutHud();
+            }
+
+            clampCamera();
+        }
+
+        function clampCamera() {
+            if (viewW >= WORLD_W) {
+                camX = (WORLD_W - viewW) / 2;
+            } else {
+                camX = Math.max(0, Math.min(WORLD_W - viewW, camX));
+            }
+            if (viewH >= WORLD_H) {
+                camY = (WORLD_H - viewH) / 2;
+            } else {
+                camY = Math.max(0, Math.min(WORLD_H - viewH, camY));
+            }
+        }
+
+        function centerCameraOn(x, y) {
+            camX = x - viewW / 2;
+            camY = y - viewH / 2;
+            clampCamera();
+        }
+
+        // Blit the camera window of the world buffer onto the screen.
+        function compositeWorldToScreen() {
+            screenCtx.setTransform(DPR, 0, 0, DPR, 0, 0);
+            screenCtx.imageSmoothingEnabled = true;
+            screenCtx.imageSmoothingQuality = 'high';
+            screenCtx.clearRect(0, 0, cssW, cssH);
+            screenCtx.drawImage(canvas, camX, camY, viewW, viewH, 0, 0, cssW, cssH);
+        }
+
+        // Run a HUD/menu drawing function in screen-fixed UI space.
+        function hudPass(fn) {
+            screenCtx.setTransform(DPR * uiScale, 0, 0, DPR * uiScale, 0, 0);
+            ctx = screenCtx;
+            try {
+                fn();
+            } finally {
+                ctx = WORLD_CTX;
+                screenCtx.setTransform(1, 0, 0, 1, 0, 0);
+            }
+        }
 
         const BASE_URL = 'https://pingeus.loiyaa.com/assets/';
 
@@ -166,7 +266,7 @@
         const purpleWallTempCtx = purpleWallTempCanvas.getContext('2d');
 
         // Testing constant - set to 1 for production
-        const STARTING_LEVEL = 21;
+        const STARTING_LEVEL = 1;
 
         // UI Zone - bottom 10% reserved for buttons
         const UI_ZONE_PERCENT = 0.1;
@@ -228,14 +328,14 @@
             height: 80,
             pressed: false,
             animationFrame: 0,
-            get x() { return canvas.width - this.width - 40; },
-            get y() { return canvas.height - this.height - 30; }
+            get x() { return VW - this.width - 40; },
+            get y() { return VH - this.height - 30; }
         };
 
         let currentSpell = 'blue';
         const buttonRadius = 48;
         const buttonSpacing = 140;
-        const bottomY = canvas.height - 70;
+        let bottomY = VH - 70;
 
         let spellButtons = [
             {
@@ -292,6 +392,17 @@
             }
         ];
 
+        // Re-centre the HUD spell buttons horizontally within the current UI space.
+        // Called whenever the viewport changes and at the top of each HUD frame.
+        function layoutHud() {
+            bottomY = VH - 70;
+            const totalSpan = buttonSpacing * (spellButtons.length - 1);
+            const startX = VW / 2 - totalSpan / 2;
+            for (let i = 0; i < spellButtons.length; i++) {
+                spellButtons[i].x = startX + buttonSpacing * i;
+                spellButtons[i].y = bottomY;
+            }
+        }
         let isDrawing = false;
         let drawStart = null;
         let drawCurrent = null;
@@ -303,9 +414,9 @@
 
         let fishes = [];
         let lastFishSpawn = 0;
-        const FISH_SPAWN_INTERVAL = 10000; // 10 seconds
+        const FISH_SPAWN_INTERVAL = 2500; // 2.5 seconds (4x as many fish)
         let fishEatenThisLevel = 0;
-        const MAX_FISH_PER_LEVEL = 4;
+        const MAX_FISH_PER_LEVEL = 16;
 
         let blowfish = null;
         let blowfishSpawnTime = 0;
@@ -601,9 +712,9 @@
                     window.FarcadeSDK.singlePlayer.actions.ready();
                 }
 
-                setTimeout(() => {
-                    LPatternBackgroundSystem.init();
-                }, 100);
+                recomputeViewport();
+                window.addEventListener('resize', recomputeViewport);
+                window.addEventListener('orientationchange', recomputeViewport);
 
                 requestAnimationFrame(gameLoop);
             }
@@ -1184,7 +1295,7 @@
         class StartScreenPenguin {
             constructor() {
                 this.x = -50;
-                this.y = canvas.height / 2 - 19;
+                this.y = VH / 2 - 19;
                 this.vx = 18;
                 this.width = 25;
                 this.height = 38;
@@ -1204,7 +1315,7 @@
             }
 
             isOffScreen() {
-                return this.x > canvas.width + 50;
+                return this.x > VW + 50;
             }
 
             draw() {
@@ -2124,26 +2235,14 @@
                 windTurbine: 0
             };
 
-            // Base counts - 1 when introduced
-            if (currentLevel >= 5) counts.metalBox = 1;
-            if (currentLevel >= 9) counts.iceSlick = 1;
-            if (currentLevel >= 13) counts.windTurbine = 1;
-
-            // Calculate increments every 2 levels starting from 7
-            if (currentLevel >= 7) {
-                const obstacleTypes = ['metalBox', 'iceSlick', 'windTurbine'];
-                let incrementIndex = 0;
-
-                for (let lvl = 7; lvl <= currentLevel; lvl += 2) {
-                    // Skip introduction levels (9 and 13)
-                    if (lvl === 9 || lvl === 13) continue;
-
-                    // Rotate which obstacle type gets incremented
-                    const obstacleType = obstacleTypes[incrementIndex % 3];
-                    counts[obstacleType]++;
-                    incrementIndex++;
-                }
-            }
+            // Each obstacle type is introduced at a fixed level with a count of 1,
+            // and from then on its quantity grows by 1 for every additional level.
+            //   metalBox   introduced at level 5
+            //   iceSlick   introduced at level 9
+            //   windTurbine introduced at level 13
+            if (currentLevel >= 5) counts.metalBox = currentLevel - 4;
+            if (currentLevel >= 9) counts.iceSlick = currentLevel - 8;
+            if (currentLevel >= 13) counts.windTurbine = currentLevel - 12;
 
             return counts;
         }
@@ -3042,7 +3141,7 @@
             const colors = ['#0066FF', '#FF4444', '#AA44FF', '#FFD700', '#00FF88'];
             const particlesPerBurst = 15;
             const numBursts = 12;
-            const spacing = canvas.width / (numBursts + 1);
+            const spacing = VW / (numBursts + 1);
             const startTime = performance.now();
 
             for (let burst = 0; burst < numBursts; burst++) {
@@ -3077,19 +3176,19 @@
             const startTime = performance.now();
 
             const positions = [
-                { x: canvas.width * 0.2, delay: 0 },
-                { x: canvas.width * 0.5, delay: 800 },
-                { x: canvas.width * 0.8, delay: 400 }
+                { x: VW * 0.2, delay: 0 },
+                { x: VW * 0.5, delay: 800 },
+                { x: VW * 0.8, delay: 400 }
             ];
 
             positions.forEach(pos => {
                 jumpingPudgies.push({
                     x: pos.x,
-                    y: canvas.height + pudgyHeight / 2,
+                    y: VH + pudgyHeight / 2,
                     width: pudgyWidth,
                     height: pudgyHeight,
-                    startY: canvas.height + pudgyHeight / 2,
-                    targetY: canvas.height / 2,
+                    startY: VH + pudgyHeight / 2,
+                    targetY: VH / 2,
                     jumpDuration: 2000,
                     startTime: startTime + pos.delay,
                     active: false
@@ -3296,21 +3395,25 @@
             });
         }
 
-        function handlePointerDown(pos) {
+        function handlePointerDown(screenPos) {
+            // screenPos is in CSS pixels relative to the screen canvas.
+            const ui = screenToUi(screenPos);     // for HUD / menus / buttons
+            const world = screenToWorld(screenPos); // for casting spells in the level
+
             if (gameState === 'start') {
                 if (helpPopup.visible) {
-                    if (isPointInButton(pos.x, pos.y, helpPopup.okButton)) {
+                    if (isPointInButton(ui.x, ui.y, helpPopup.okButton)) {
                         helpPopup.visible = false;
                         return;
                     }
 
-                    const popupWidth = canvas.width * 0.8;
-                    const popupHeight = canvas.height * 0.8;
-                    const popupX = (canvas.width - popupWidth) / 2;
-                    const popupY = (canvas.height - popupHeight) / 2;
+                    const popupWidth = VW * 0.8;
+                    const popupHeight = VH * 0.8;
+                    const popupX = (VW - popupWidth) / 2;
+                    const popupY = (VH - popupHeight) / 2;
 
-                    if (pos.x < popupX || pos.x > popupX + popupWidth ||
-                        pos.y < popupY || pos.y > popupY + popupHeight) {
+                    if (ui.x < popupX || ui.x > popupX + popupWidth ||
+                        ui.y < popupY || ui.y > popupY + popupHeight) {
                         helpPopup.visible = false;
                         return;
                     }
@@ -3318,13 +3421,13 @@
                     return;
                 }
 
-                if (startButton.visible && isPointInButton(pos.x, pos.y, startButton)) {
+                if (startButton.visible && isPointInButton(ui.x, ui.y, startButton)) {
                     startGame();
                     startShipSeaRocking();
                     return;
                 }
 
-                if (helpButton.visible && isPointInButton(pos.x, pos.y, helpButton)) {
+                if (helpButton.visible && isPointInButton(ui.x, ui.y, helpButton)) {
                     helpPopup.visible = true;
                     return;
                 }
@@ -3333,14 +3436,14 @@
             }
 
             if (gameState === 'intermission' && intermissionButton.visible) {
-                if (isPointInButton(pos.x, pos.y, intermissionButton)) {
+                if (isPointInButton(ui.x, ui.y, intermissionButton)) {
                     startNextLevel();
                     return;
                 }
             }
 
             if (gameState === 'gameover' && gameOverButton.visible) {
-                if (isPointInButton(pos.x, pos.y, gameOverButton)) {
+                if (isPointInButton(ui.x, ui.y, gameOverButton)) {
                     restartGame();
                     return;
                 }
@@ -3348,14 +3451,14 @@
 
             if (gameState !== 'playing') return;
 
-            if (isPointInButton(pos.x, pos.y, speedButton)) {
+            if (isPointInButton(ui.x, ui.y, speedButton)) {
                 speedButton.pressed = !speedButton.pressed;
                 gameSpeed = speedButton.pressed ? 8 : 1;
                 return;
             }
 
             for (let button of spellButtons) {
-                if (isPointInCircleButton(pos.x, pos.y, button)) {
+                if (isPointInCircleButton(ui.x, ui.y, button)) {
                     currentSpell = button.spell;
                     return;
                 }
@@ -3364,29 +3467,29 @@
             const minMana = currentSpell === 'red' ? 40 : currentSpell === 'purple' ? 40 : 1;
 
             if (mana < minMana) {
-                createSpellParticles(pos.x, pos.y, currentSpell);
+                createSpellParticles(world.x, world.y, currentSpell);
                 flashSpellButton(currentSpell);
                 return;
             }
 
             if (currentSpell === 'red') {
-                createExplosion(pos.x, pos.y);
+                createExplosion(world.x, world.y);
                 return;
             }
 
             if (currentSpell === 'purple') {
-                placePurpleWall(pos.x, pos.y);
+                placePurpleWall(world.x, world.y);
                 return;
             }
 
             isDrawing = true;
-            drawStart = pos;
-            drawCurrent = pos;
+            drawStart = world;
+            drawCurrent = world;
         }
 
-        function handlePointerMove(pos) {
+        function handlePointerMove(screenPos) {
             if (!isDrawing) return;
-            drawCurrent = pos;
+            drawCurrent = screenToWorld(screenPos);
         }
 
         function handleDrawingEnd() {
@@ -3425,27 +3528,32 @@
             drawCurrent = null;
         }
 
+        // Pointer position in CSS pixels relative to the screen canvas.
         function getMousePos(event) {
-            const rect = canvas.getBoundingClientRect();
-            const scaleX = canvas.width / rect.width;
-            const scaleY = canvas.height / rect.height;
-
+            const rect = screenCanvas.getBoundingClientRect();
             return {
-                x: (event.clientX - rect.left) * scaleX,
-                y: (event.clientY - rect.top) * scaleY
+                x: event.clientX - rect.left,
+                y: event.clientY - rect.top
             };
         }
 
         function getTouchPos(event) {
-            const rect = canvas.getBoundingClientRect();
-            const scaleX = canvas.width / rect.width;
-            const scaleY = canvas.height / rect.height;
+            const rect = screenCanvas.getBoundingClientRect();
             const touch = event.touches[0] || event.changedTouches[0];
-
             return {
-                x: (touch.clientX - rect.left) * scaleX,
-                y: (touch.clientY - rect.top) * scaleY
+                x: touch.clientX - rect.left,
+                y: touch.clientY - rect.top
             };
+        }
+
+        // Map a screen(css)-px point into world coordinates (via the camera).
+        function screenToWorld(p) {
+            return { x: camX + p.x / zoom, y: camY + p.y / zoom };
+        }
+
+        // Map a screen(css)-px point into HUD/UI design coordinates.
+        function screenToUi(p) {
+            return { x: p.x / uiScale, y: p.y / uiScale };
         }
 
         // Replace the drawLine function
@@ -3903,16 +4011,16 @@
 
         function drawStartScreen() {
             ctx.fillStyle = '#000000';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillRect(0, 0, VW, VH);
 
             startScreenPenguins.forEach(penguin => penguin.draw());
 
             ctx.font = '80px Luckiest Guy, Arial';
             ctx.textAlign = 'center';
-            drawStrokedText('PINGEUS', canvas.width / 2, 150, '#FFD700', '#000000', 4);
+            drawStrokedText('PINGEUS', VW / 2, 150, '#FFD700', '#000000', 4);
 
-            startButton.x = canvas.width / 2 - startButton.width / 2;
-            startButton.y = canvas.height - 300;
+            startButton.x = VW / 2 - startButton.width / 2;
+            startButton.y = VH - 300;
 
             ctx.fillStyle = '#4CAF50';
             ctx.strokeStyle = '#fff';
@@ -3922,10 +4030,10 @@
 
             ctx.fillStyle = '#FFFFFF';
             ctx.font = '48px Luckiest Guy, Arial';
-            ctx.fillText('PLAY', canvas.width / 2, startButton.y + startButton.height / 2 + 15);
+            ctx.fillText('PLAY', VW / 2, startButton.y + startButton.height / 2 + 15);
 
-            helpButton.x = canvas.width / 2 - helpButton.width / 2;
-            helpButton.y = canvas.height - 180;
+            helpButton.x = VW / 2 - helpButton.width / 2;
+            helpButton.y = VH - 180;
 
             ctx.fillStyle = '#FF4444';
             ctx.strokeStyle = '#fff';
@@ -3935,7 +4043,7 @@
 
             ctx.fillStyle = '#FFFFFF';
             ctx.font = '36px Luckiest Guy, Arial';
-            ctx.fillText('HELP', canvas.width / 2, helpButton.y + helpButton.height / 2 + 12);
+            ctx.fillText('HELP', VW / 2, helpButton.y + helpButton.height / 2 + 12);
 
             if (helpPopup.visible) {
                 drawHelpPopup();
@@ -3944,12 +4052,12 @@
 
         function drawHelpPopup() {
             ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillRect(0, 0, VW, VH);
 
-            const popupWidth = canvas.width * 0.8;
-            const popupHeight = canvas.height * 0.8;
-            const popupX = (canvas.width - popupWidth) / 2;
-            const popupY = (canvas.height - popupHeight) / 2;
+            const popupWidth = VW * 0.8;
+            const popupHeight = VH * 0.8;
+            const popupX = (VW - popupWidth) / 2;
+            const popupY = (VH - popupHeight) / 2;
             ctx.fillStyle = '#2c3e50';
             ctx.strokeStyle = '#fff';
             ctx.lineWidth = 4;
@@ -3960,16 +4068,16 @@
 
             ctx.font = '38px Luckiest Guy, Arial';
             let yPos = popupY + 90;
-            drawStrokedText('LEAD PENGUS FROM IGLOO TO SHIP', canvas.width / 2, yPos, '#FFD700');
+            drawStrokedText('LEAD PENGUS FROM IGLOO TO SHIP', VW / 2, yPos, '#FFD700');
             yPos += 120;
             ctx.fillStyle = '#FFFFFF';
             ctx.font = '34px Luckiest Guy, Arial';
-            ctx.fillText('Your spells:', canvas.width / 2, yPos);
+            ctx.fillText('Your spells:', VW / 2, yPos);
             yPos += 120;
 
             ctx.font = '30px Luckiest Guy, Arial';
             const iconSize = 72;
-            const iconX = canvas.width / 2 - 240;
+            const iconX = VW / 2 - 240;
             const textOffset = 80;
 
             ctx.fillStyle = '#0066FF';
@@ -4023,7 +4131,7 @@
             ctx.textBaseline = 'alphabetic';
             ctx.fillText('Speed up game', iconX + textOffset, yPos + 10);
 
-            helpPopup.okButton.x = canvas.width / 2 - helpPopup.okButton.width / 2;
+            helpPopup.okButton.x = VW / 2 - helpPopup.okButton.width / 2;
             helpPopup.okButton.y = popupY + popupHeight - 90;
             ctx.fillStyle = '#FF4444';
             ctx.strokeStyle = '#fff';
@@ -4033,7 +4141,7 @@
             ctx.fillStyle = '#FFFFFF';
             ctx.font = '36px Luckiest Guy, Arial';
             ctx.textAlign = 'center';
-            ctx.fillText('OK', canvas.width / 2, helpPopup.okButton.y + helpPopup.okButton.height / 2 + 12);
+            ctx.fillText('OK', VW / 2, helpPopup.okButton.y + helpPopup.okButton.height / 2 + 12);
         }
 
         function updateStartScreen() {
@@ -4045,6 +4153,8 @@
             gameState = 'playing';
             startScreenPenguins = [];
             generateTerrain();
+            if (entrance) centerCameraOn(entrance.x, entrance.y);
+            enableTiltControls();
             gameStartTime = Date.now();
             accumulatedTime = 0;
             lastFrameTime = 0;
@@ -4086,6 +4196,7 @@
             windTurbines = [];
 
             generateTerrain();
+            if (entrance) centerCameraOn(entrance.x, entrance.y);
             gameStartTime = Date.now();
             gameState = 'playing';
             gameActive = true;
@@ -4094,36 +4205,136 @@
             requestAnimationFrame(gameLoop);
         }
 
-        canvas.addEventListener('mousedown', function (event) {
+        screenCanvas.addEventListener('mousedown', function (event) {
             const pos = getMousePos(event);
             handlePointerDown(pos);
         });
 
-        canvas.addEventListener('mousemove', function (event) {
+        screenCanvas.addEventListener('mousemove', function (event) {
             const pos = getMousePos(event);
             handlePointerMove(pos);
         });
 
-        canvas.addEventListener('mouseup', function (event) {
+        screenCanvas.addEventListener('mouseup', function (event) {
             handleDrawingEnd();
         });
 
-        canvas.addEventListener('touchstart', function (event) {
+        screenCanvas.addEventListener('touchstart', function (event) {
             event.preventDefault();
             const pos = getTouchPos(event);
             handlePointerDown(pos);
         }, { passive: false });
 
-        canvas.addEventListener('touchmove', function (event) {
+        screenCanvas.addEventListener('touchmove', function (event) {
             event.preventDefault();
             const pos = getTouchPos(event);
             handlePointerMove(pos);
         }, { passive: false });
 
-        canvas.addEventListener('touchend', function (event) {
+        screenCanvas.addEventListener('touchend', function (event) {
             event.preventDefault();
             handleDrawingEnd();
         }, { passive: false });
+
+        // ===== CAMERA PANNING CONTROLS =====
+        // Desktop: WASD / arrow keys. Held keys set a pan velocity.
+        const panKeys = { left: false, right: false, up: false, down: false };
+        const KEY_PAN_SPEED = 1800; // world units per second
+
+        function keyToDir(code, key) {
+            if (code === 'ArrowLeft' || key === 'a' || key === 'A') return 'left';
+            if (code === 'ArrowRight' || key === 'd' || key === 'D') return 'right';
+            if (code === 'ArrowUp' || key === 'w' || key === 'W') return 'up';
+            if (code === 'ArrowDown' || key === 's' || key === 'S') return 'down';
+            return null;
+        }
+
+        window.addEventListener('keydown', function (e) {
+            const dir = keyToDir(e.code, e.key);
+            if (dir) { panKeys[dir] = true; e.preventDefault(); }
+        });
+        window.addEventListener('keyup', function (e) {
+            const dir = keyToDir(e.code, e.key);
+            if (dir) { panKeys[dir] = false; }
+        });
+
+        // Mobile: tilt the phone to pan the view.
+        // gamma = left/right tilt, beta = front/back tilt. We calibrate a neutral
+        // resting orientation the first time we get a reading after play starts.
+        let tiltEnabled = false;
+        let tiltNeutralBeta = null;
+        let tiltNeutralGamma = null;
+        let tiltVX = 0, tiltVY = 0;            // resulting pan velocity (world units / s)
+        const TILT_DEADZONE = 4;               // degrees
+        const TILT_MAX_ANGLE = 28;             // degrees -> full speed
+        const TILT_PAN_SPEED = 2200;           // world units per second at full tilt
+
+        function handleDeviceOrientation(e) {
+            if (e.beta === null || e.gamma === null) return;
+            if (tiltNeutralBeta === null) {
+                tiltNeutralBeta = e.beta;
+                tiltNeutralGamma = e.gamma;
+            }
+
+            const dGamma = e.gamma - tiltNeutralGamma; // +right
+            const dBeta = e.beta - tiltNeutralBeta;     // +tilt away/down
+
+            const norm = (d) => {
+                const s = Math.sign(d);
+                const m = Math.max(0, Math.abs(d) - TILT_DEADZONE);
+                return s * Math.min(1, m / (TILT_MAX_ANGLE - TILT_DEADZONE));
+            };
+
+            tiltVX = norm(dGamma) * TILT_PAN_SPEED;
+            tiltVY = norm(dBeta) * TILT_PAN_SPEED;
+        }
+
+        function enableTiltControls() {
+            if (tiltEnabled) return;
+            const DOE = window.DeviceOrientationEvent;
+            if (!DOE) return;
+
+            // Re-calibrate neutral on (re)enable.
+            tiltNeutralBeta = null;
+            tiltNeutralGamma = null;
+
+            if (typeof DOE.requestPermission === 'function') {
+                DOE.requestPermission().then(state => {
+                    if (state === 'granted') {
+                        window.addEventListener('deviceorientation', handleDeviceOrientation);
+                        tiltEnabled = true;
+                    }
+                }).catch(() => { });
+            } else {
+                window.addEventListener('deviceorientation', handleDeviceOrientation);
+                tiltEnabled = true;
+            }
+        }
+
+        // Apply pan velocity (keyboard + tilt) to the camera each frame.
+        let lastPanTime = 0;
+        function updateCameraPan(now) {
+            if (!lastPanTime) lastPanTime = now;
+            const dt = Math.min(0.05, (now - lastPanTime) / 1000);
+            lastPanTime = now;
+
+            if (gameState !== 'playing') return;
+
+            let vx = 0, vy = 0;
+            if (panKeys.left) vx -= KEY_PAN_SPEED;
+            if (panKeys.right) vx += KEY_PAN_SPEED;
+            if (panKeys.up) vy -= KEY_PAN_SPEED;
+            if (panKeys.down) vy += KEY_PAN_SPEED;
+
+            vx += tiltVX;
+            vy += tiltVY;
+
+            if (vx !== 0 || vy !== 0) {
+                camX += vx * dt;
+                camY += vy * dt;
+                clampCamera();
+            }
+        }
 
         if (window.FarcadeSDK) {
             window.FarcadeSDK.on('play_again', () => {
@@ -4160,7 +4371,7 @@
 
         function drawIntermissionScreen() {
             ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillRect(0, 0, VW, VH);
 
             drawJumpingPudgies();
 
@@ -4168,11 +4379,11 @@
 
             ctx.font = '60px Luckiest Guy, Arial';
             ctx.textAlign = 'center';
-            drawStrokedText(`LEVEL ${currentLevel} COMPLETED`, canvas.width / 2, 150, '#FFD700', '#000000', 4);
+            drawStrokedText(`LEVEL ${currentLevel} COMPLETED`, VW / 2, 150, '#FFD700', '#000000', 4);
 
             const pulseScale = 1 + Math.sin(Date.now() / 300) * 0.05;
             ctx.save();
-            ctx.translate(canvas.width / 2, canvas.height / 2 - 100);
+            ctx.translate(VW / 2, VH / 2 - 100);
             ctx.scale(pulseScale, pulseScale);
             ctx.font = '48px Luckiest Guy, Arial';
             drawStrokedText(`+${levelCompleteBonus} mana`, 0, 0, '#00BFFF');
@@ -4180,18 +4391,18 @@
 
             ctx.font = '24px Luckiest Guy, Arial';
             const lineHeight = 36;
-            let y = canvas.height / 2 + 50;
+            let y = VH / 2 + 50;
 
             const sentences = currentHint.split('. ').filter(s => s.length > 0);
 
             sentences.forEach((sentence, index) => {
                 const displayText = (index < sentences.length - 1 && !sentence.endsWith('.')) ? sentence + '.' : sentence;
-                drawStrokedText(displayText, canvas.width / 2, y, '#FFFFFF');
+                drawStrokedText(displayText, VW / 2, y, '#FFFFFF');
                 y += lineHeight;
             });
 
-            intermissionButton.x = canvas.width / 2 - intermissionButton.width / 2;
-            intermissionButton.y = canvas.height - 200;
+            intermissionButton.x = VW / 2 - intermissionButton.width / 2;
+            intermissionButton.y = VH - 200;
 
             ctx.fillStyle = '#4CAF50';
             ctx.strokeStyle = '#fff';
@@ -4201,26 +4412,26 @@
 
             ctx.fillStyle = '#FFFFFF';
             ctx.font = '36px Luckiest Guy, Arial';
-            ctx.fillText(`ENTER LEVEL ${currentLevel + 1}`, canvas.width / 2, intermissionButton.y + intermissionButton.height / 2 + 12);
+            ctx.fillText(`ENTER LEVEL ${currentLevel + 1}`, VW / 2, intermissionButton.y + intermissionButton.height / 2 + 12);
         }
 
         function drawGameOverScreen() {
             ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillRect(0, 0, VW, VH);
 
             ctx.font = '60px Luckiest Guy, Arial';
             ctx.textAlign = 'center';
-            drawStrokedText('TIME UP!', canvas.width / 2, canvas.height / 2 - 100, '#FF4444', '#000000', 4);
+            drawStrokedText('TIME UP!', VW / 2, VH / 2 - 100, '#FF4444', '#000000', 4);
 
             ctx.font = '36px Luckiest Guy, Arial';
-            drawStrokedText(`Final Score: ${score}`, canvas.width / 2, canvas.height / 2 - 20, '#FFFFFF');
+            drawStrokedText(`Final Score: ${score}`, VW / 2, VH / 2 - 20, '#FFFFFF');
 
             ctx.font = '28px Luckiest Guy, Arial';
-            drawStrokedText(`Reached Level ${currentLevel}`, canvas.width / 2, canvas.height / 2 + 40, '#FFFFFF');
+            drawStrokedText(`Reached Level ${currentLevel}`, VW / 2, VH / 2 + 40, '#FFFFFF');
 
             if (!window.FarcadeSDK) {
-                gameOverButton.x = canvas.width / 2 - gameOverButton.width / 2;
-                gameOverButton.y = canvas.height / 2 + 100;
+                gameOverButton.x = VW / 2 - gameOverButton.width / 2;
+                gameOverButton.y = VH / 2 + 100;
 
                 ctx.fillStyle = '#4CAF50';
                 ctx.strokeStyle = '#fff';
@@ -4230,7 +4441,7 @@
 
                 ctx.fillStyle = '#FFFFFF';
                 ctx.font = '48px Luckiest Guy, Arial';
-                ctx.fillText('PLAY', canvas.width / 2, gameOverButton.y + gameOverButton.height / 2 + 15);
+                ctx.fillText('PLAY', VW / 2, gameOverButton.y + gameOverButton.height / 2 + 15);
             }
         }
 
@@ -4264,7 +4475,7 @@
             }
 
             ctx.save();
-            ctx.translate(canvas.width / 2, 60);
+            ctx.translate(VW / 2, 60);
             ctx.scale(scoreAnimation.scale, scoreAnimation.scale);
             ctx.font = '64px Luckiest Guy, Arial';
             ctx.textAlign = 'center';
@@ -4279,7 +4490,7 @@
             const seconds = Math.floor((remainingTime % 60000) / 1000);
             const timeText = `${minutes}:${seconds.toString().padStart(2, '0')}`;
 
-            drawStrokedText(timeText, canvas.width - 30, 50, '#FFFFFF');
+            drawStrokedText(timeText, VW - 30, 50, '#FFFFFF');
 
             ctx.textAlign = 'left';
             ctx.font = '40px Luckiest Guy, Arial';
@@ -4287,7 +4498,7 @@
             drawStrokedText(penguinText, 30, 50, '#FFFFFF');
 
             ctx.save();
-            ctx.translate(100 + manaAnimation.shake, canvas.height - 60);
+            ctx.translate(100 + manaAnimation.shake, VH - 60);
             ctx.font = '64px Luckiest Guy, Arial';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
@@ -4300,16 +4511,19 @@
         function drawGame() {
             if (gameState === 'intermission') {
                 drawStaticTerrain();
-                drawIntermissionScreen();
+                compositeWorldToScreen();
+                hudPass(drawIntermissionScreen);
                 return;
             }
 
             if (gameState === 'gameover') {
                 drawStaticTerrain();
-                drawGameOverScreen();
+                compositeWorldToScreen();
+                hudPass(drawGameOverScreen);
                 return;
             }
 
+            // ----- WORLD PASS (rendered into the offscreen world buffer) -----
             drawStaticTerrain();
 
             drawAnimatedBlueRamps(performance.now());
@@ -4390,11 +4604,18 @@
             drawParticles();
             drawExplosionAnimations(Date.now());
 
-            drawUI();
             drawTextAnimations(manaTextAnimations, '48px Luckiest Guy, Arial', 'center', 'middle', '#00BFFF');
             drawTextAnimations(penguinCountTextAnimations, '36px Luckiest Guy, Arial', 'left', 'alphabetic', '#FFD700');
-            drawSpeedButton();
-            drawSpellButtons();
+
+            // ----- COMPOSITE world to screen via the camera -----
+            compositeWorldToScreen();
+
+            // ----- HUD PASS (screen-fixed UI) -----
+            hudPass(function () {
+                drawUI();
+                drawSpeedButton();
+                drawSpellButtons();
+            });
         }
 
         function showIntermission() {
@@ -4444,6 +4665,7 @@
             windTurbines = [];
 
             generateTerrain();
+            if (entrance) centerCameraOn(entrance.x, entrance.y);
 
             gameStartTime = Date.now();
             gameState = 'playing';
@@ -4466,7 +4688,9 @@
                     }
 
                     updateStartScreen();
-                    drawStartScreen();
+                    screenCtx.setTransform(DPR, 0, 0, DPR, 0, 0);
+                    screenCtx.clearRect(0, 0, cssW, cssH);
+                    hudPass(drawStartScreen);
                 }
                 requestAnimationFrame(gameLoop);
                 return;
@@ -4605,6 +4829,8 @@
             }
 
             lemmings = lemmings.filter(lemming => lemming.alive);
+
+            updateCameraPan(currentTime);
 
             drawGame();
 
