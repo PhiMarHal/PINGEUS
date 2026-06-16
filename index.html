@@ -284,8 +284,8 @@
         let lemmingsSpawned = 0;
         let lemmingsSaved = 0;
 
-        let mana = 2000;
-        let lastLevelBonus = 2000;
+        let mana = 4000;
+        let lastLevelBonus = 4000;
         let score = 0;
 
         let levelTime = 240000;
@@ -4168,8 +4168,8 @@
             lemmingsSpawned = 0;
             lemmingsSaved = 0;
             maxLemmings = 40;
-            mana = 2000;
-            lastLevelBonus = 2000;
+            mana = 4000;
+            lastLevelBonus = 4000;
             score = 0;
             accumulatedTime = 0;
             lastFrameTime = 0;
@@ -4508,6 +4508,45 @@
             ctx.restore();
         }
 
+        // Soft edge markers showing where the igloo (entrance) and ship (exit) are
+        // whenever they're off the visible camera window. Drawn in the HUD pass, so
+        // all coordinates are in UI space (0..VW, 0..VH).
+        function drawOffscreenIndicators() {
+            const S = VH / VIEW_H;            // world units -> UI units (uniform zoom)
+            const ICON = 90;                  // marker size in UI units
+            const margin = ICON / 2 + 16;     // keep the marker fully on screen
+            // Very soft blink centred on 0.5 opacity.
+            const blink = 0.5 + Math.sin(performance.now() / 1000 * 2.2) * 0.13;
+
+            const targets = [
+                { obj: entrance, sprite: sprites.igloo },
+                { obj: exit, sprite: sprites.ship }
+            ];
+
+            for (const target of targets) {
+                const obj = target.obj;
+                const sprite = target.sprite;
+                if (!obj || !sprite) continue;
+
+                // Object centre in UI coordinates.
+                const ux = (obj.x - camX) * S;
+                const uy = (obj.y - camY) * S;
+
+                // If the centre is within the visible UI rect it's on screen: no marker.
+                if (ux >= 0 && ux <= VW && uy >= 0 && uy <= VH) continue;
+
+                // Clamp to the nearest edge, keeping the marker fully visible.
+                const ix = Math.max(margin, Math.min(VW - margin, ux));
+                const iy = Math.max(margin, Math.min(VH - margin, uy));
+
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, blink);
+                ctx.imageSmoothingEnabled = true;
+                ctx.drawImage(sprite, ix - ICON / 2, iy - ICON / 2, ICON, ICON);
+                ctx.restore();
+            }
+        }
+
         function drawGame() {
             if (gameState === 'intermission') {
                 drawStaticTerrain();
@@ -4612,6 +4651,7 @@
 
             // ----- HUD PASS (screen-fixed UI) -----
             hudPass(function () {
+                drawOffscreenIndicators();
                 drawUI();
                 drawSpeedButton();
                 drawSpellButtons();
